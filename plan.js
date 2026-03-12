@@ -1,0 +1,1881 @@
+/// <reference path="../../../typings/xrm/xrm.d.ts" />
+/// <reference path="../common/QueryHelper.ts" />
+/// <reference path="../common/FormScriptingHelper.ts" />
+/// <reference path="../../../ct_/scripts/fields/ct_plantypeFields.ts" />
+
+//*****************************************************************************
+// Filename:    PlanForm.js
+// Purpose:     This file contains the form script for the Plan entity
+//
+//*****************************************************************************
+//*****************************************************************************
+//*****************************************************************************
+module PlanForm {
+
+
+    var tabServiceProviders = "Service Providers";
+    var sectionTpaProviders = "sectionTpaProviders";
+    var sectionInsuranceProviders = "sectionInsuranceProviders";
+    var sectionActuaryProviders = "sectionActuaryProviders";
+    var sectionPlanSponsorData2 = "Plan Sponsor Data Section 2";
+    var sectionPlanSponsorData3 = "Plan Sponsor Data Section 3";
+    var sectionPlanSponsorData3 = "Plan Sponsor Data Section 3";
+    var tabNonQualified = "Non Qualified";
+    var tabPlanSponsorData = "Plan Sponsor Data";
+    var sectionNQSponsorData = "NQ Sponsor Data";
+    var tabFeeSchedule = "Fee Schedule";
+    var sectionNQFeeSchedule = "NQ Fee Schedule";
+    var sectionSourceOfRevenue = "Source of Revenue";
+    var tabSeismic = "Seismic";
+    var tabValidateQRG = "ValidateQRG";
+    var SwitchPlanForms = false;
+    var tabCaptrustService = "captrust_services_tab";
+
+    var onLoadPASServiceType: any = null;
+
+    var discretionarytype_plantype_changed = false;
+    var Current_ct_discretionarytype = null;
+    var Current_ct_plantype = null;
+    var DoingOnChangeContactforVendor = false;
+
+
+    export function onLoad(executionContext) {
+        try {
+           
+            discretionarytype_plantype_changed = false;
+            FormScriptingHelper.setFormContext(executionContext.getFormContext());
+            FormScriptingHelper.removeOptionSetOptionByValue(ct_planFields.ct_plantype, ct_planOptions.ct_plantype.DB_CashBalance);
+
+            onLoadPASServiceType = FormScriptingHelper.getFieldValue(ct_planFields.ct_passervicetype);
+
+            onLoadRedirect();
+            var formName = FormScriptingHelper.getFormContext().ui.formSelector.getCurrentItem().getLabel();
+            if (formName == "Plan-Opportunities") {
+                if (FormScriptingHelper.getOptionSetValue("ct_processingservicescases") == 1)   // Services - Generating
+                {
+                    FormScriptingHelper.hideSection("captrust_services_tab", "ApprovedPathwayStatusSection");
+                } else {
+                    FormScriptingHelper.hideSection("captrust_services_tab", "ApprovedPathwayStatusSection");
+                }
+
+                FormScriptingHelper.makeFieldRequired(ct_planFields.ct_recordkeepervendorid);
+                executionContext.getFormContext().ui.process.setVisible(false); //Hide Business Process Flow
+                FormScriptingHelper.makeFieldRequired("ct_estimatedrevenue");
+                FormScriptingHelper.addOnChange(ct_planFields.ct_discretionarytype, onChange_Oppt_Discretionarytype);
+                FormScriptingHelper.addOnChange(ct_planFields.ct_plantype, OnChange_Oppt_PlanType);
+                setErisaForNonQualifiedPlans();
+
+                Current_ct_discretionarytype = FormScriptingHelper.getOptionSetValue(ct_planFields.ct_discretionarytype);
+                Current_ct_plantype = FormScriptingHelper.getOptionSetValue(ct_planFields.ct_plantype);
+            }
+            else if (formName == "Plan") {
+
+                executionContext.getFormContext().ui.process.setVisible(true); //Show Business Process Flow  
+
+               
+                // When Vendor or contact changes set up filters.
+                FormScriptingHelper.addOnChange(ct_planFields.ct_recordkeepervendorid, () => OnChange_Vendor_SetFilters("ct_recordkeepervendorid"));
+                FormScriptingHelper.addOnChange(ct_planFields.ct_recordkeeperid, () => OnChange_Contact_SetFilters("ct_recordkeeperid"));
+
+                FormScriptingHelper.addOnChange(ct_planFields.ct_trusteevendorid, () => OnChange_Vendor_SetFilters("ct_trusteevendorid"));
+                FormScriptingHelper.addOnChange(ct_planFields.ct_trusteeid, () => OnChange_Contact_SetFilters("ct_trusteeid"));
+
+                FormScriptingHelper.addOnChange(ct_planFields.ct_custodianvendorid, () => OnChange_Vendor_SetFilters("ct_custodianvendorid"));
+                FormScriptingHelper.addOnChange(ct_planFields.ct_custodiancid, () => OnChange_Contact_SetFilters("ct_custodiancid"));
+
+                FormScriptingHelper.addOnChange(ct_planFields.ct_insurancecovendorid, () => OnChange_Vendor_SetFilters("ct_insurancecovendorid"));
+                FormScriptingHelper.addOnChange(ct_planFields.ct_insurancecoid, () => OnChange_Contact_SetFilters("ct_insurancecoid"));
+
+                FormScriptingHelper.addOnChange(ct_planFields.ct_tpavendorid, () => OnChange_Vendor_SetFilters("ct_tpavendorid"));
+                FormScriptingHelper.addOnChange(ct_planFields.ct_tpaid, () => OnChange_Contact_SetFilters("ct_tpaid"));
+
+                FormScriptingHelper.addOnChange(ct_planFields.ct_actuaryvendorid, () => OnChange_Vendor_SetFilters("ct_actuaryvendorid"));
+                FormScriptingHelper.addOnChange(ct_planFields.ct_actuaryid, () => OnChange_Contact_SetFilters("ct_actuaryid"));
+
+
+                OnChange_Vendor_SetFilters("ct_recordkeepervendorid", true);
+                OnChange_Vendor_SetFilters("ct_trusteevendorid", true);
+                OnChange_Vendor_SetFilters("ct_custodianvendorid", true);
+                OnChange_Vendor_SetFilters("ct_insurancecovendorid", true);
+                OnChange_Vendor_SetFilters("ct_tpavendorid", true);
+                OnChange_Vendor_SetFilters("ct_actuaryvendorid", true);
+
+                OnChange_Contact_SetFilters("ct_recordkeeperid", true);
+                OnChange_Contact_SetFilters("ct_trusteeid", true);
+                OnChange_Contact_SetFilters("ct_custodiancid", true);
+                OnChange_Contact_SetFilters("ct_insurancecoid", true);
+                OnChange_Contact_SetFilters("ct_tpaid", true);
+                OnChange_Contact_SetFilters("ct_actuaryid", true);
+
+            }
+            else if (formName == "Plan-Lead") {
+                executionContext.getFormContext().ui.process.setVisible(false); //Hide Business Process Flow
+                FormScriptingHelper.makeFieldOptional("ct_estimatedrevenue");
+            }
+            if (SwitchPlanForms == false && formName == "Plan") {
+                FormScriptingHelper.makeFieldRequired(ct_planFields.ct_custodian);
+                FormScriptingHelper.makeFieldRequired(ct_planFields.ct_servicetype);
+                FormScriptingHelper.makeFieldRequired(ct_planFields.ct_category);
+                FormScriptingHelper.makeFieldRequired(ct_planFields.ct_planopen);
+                FormScriptingHelper.addOnChange(ct_planFields.ct_cashreserveexpiration, OncashreserveexpirationChange);
+                FormScriptingHelper.addOnChange(ct_planFields.ct_contractonfile, onContractChange);
+                FormScriptingHelper.addOnChange(ct_planFields.ct_financetype, onFinanceChange);
+                FormScriptingHelper.addOnChange(ct_planFields.ct_prototype, changePrototype);
+                FormScriptingHelper.addOnChange(ct_planFields.ct_plantype, OnTypeChange);
+                FormScriptingHelper.addOnChange(ct_planFields.ct_plantype, onPlanTypeChange);
+                FormScriptingHelper.addOnChange(ct_planFields.ct_plantype, onChangePlantype);
+                FormScriptingHelper.addOnChange(ct_planFields.ct_discretionarytype, onChangeDiscretionarytype);
+                FormScriptingHelper.addOnChange(ct_planFields.ct_allocationtools, onChangeAllocationTools);
+                FormScriptingHelper.addOnChange(ct_planFields.ct_planleadopptclient, DiscTab);
+                FormScriptingHelper.addOnChange(ct_planFields.ct_discretionarytype, DiscTab);
+                if (checkReportingType()) {
+                    FormScriptingHelper.enableField(ct_planFields.ct_reportingdescription);
+                    FormScriptingHelper.makeFieldRequired(ct_planFields.ct_reportingdescription);
+                }
+                else {
+                    FormScriptingHelper.disableField(ct_planFields.ct_reportingdescription);
+                    FormScriptingHelper.makeFieldOptional(ct_planFields.ct_reportingdescription);
+                }
+                FormScriptingHelper.addOnChange(ct_planFields.ct_reportingtype, onChangeReportingType);
+                if (FormScriptingHelper.getFieldValue(ct_planFields.ct_cashreserveexpiration) == true) {
+                    FormScriptingHelper.makeFieldRequired(ct_planFields.ct_cashreserveexpirationdate);
+                }
+                else {
+                    FormScriptingHelper.makeFieldOptional(ct_planFields.ct_cashreserveexpirationdate);
+                }
+                getSeismicTeamDetails(executionContext);
+                getTeamDetails();
+                //Clear Owner on Create
+                /* Handled in relationship mappings
+                if (FormScriptingHelper.getFormContext().ui.getFormType() === XrmEnum.FormType.Create) {
+                    FormScriptingHelper.clearLookupField(ct_planFields.ownerid);
+                }*/
+                //Set Required and Visible fields on the form - rw 11/16/2011
+                if (FormScriptingHelper.getFormType() === 0 /* XrmEnum.FormType.Undefined */ || FormScriptingHelper.getFormContext().ui.getFormType() === 2 /* XrmEnum.FormType.Update */) {
+                    //depending on planType, some fields will not be on the form; this function removes non-applicable fields
+                    FormScriptingHelper.forceSubmit(ct_planFields.ct_erisa);
+                    FormScriptingHelper.forceSubmit(ct_planFields.ct_category);
+                    FormScriptingHelper.forceSubmit(ct_planFields.ct_servicetype);
+                    FormScriptingHelper.forceSubmit(ct_planFields.ct_financetype);
+                    FormScriptingHelper.forceSubmit(ct_planFields.ct_funded);
+                }
+                else if (FormScriptingHelper.getFormType() === 1 /* XrmEnum.FormType.Create */) {
+                    FormScriptingHelper.disableField(ct_planFields.ct_erisa);
+                    FormScriptingHelper.disableField(ct_planFields.ct_category);
+                    FormScriptingHelper.disableField(ct_planFields.ct_servicetype);
+                    FormScriptingHelper.disableField(ct_planFields.ct_financetype);
+                }
+                SetMessageLabel();
+                onPlanTypeChange(true);
+                onChangeAllocationTools(true);
+                DiscTab();
+            }
+            FormScriptingHelper.removeOptionSetOptionByValue(ct_planFields.ct_custodian, ct_planOptions.ct_custodian.TDAmeritrade);
+            hideCaptrustServiceTab();
+            SetBIFrame(executionContext);
+            toggleFinancetypeField(true);
+            //FormScriptingHelper.addOnChange(ct_planFields.ct_planname, checkAsciiCharacters);
+
+            if (FormScriptingHelper.getFormType() == XrmEnum.FormType.Create ||
+                FormScriptingHelper.getFieldValue(ct_planFields.statecode) == 0) // 0 = Active   
+            {
+                //FormScriptingHelper.removeOptionSetOptionByValue(ct_planFields.ct_reportingtype,ct_planOptions.ct_reportingtype.BlackDiamond);
+                FormScriptingHelper.removeOptionSetOptionByValue(ct_planFields.ct_reportingtype, ct_planOptions.ct_reportingtype.Performer);
+            }
+
+            changeAllocationView();
+
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onLoad");
+            }
+        }
+    } //onLoad
+
+
+    export function OnChange_Vendor_SetFilters(Vendor: string, isOnLoad: boolean = false) {
+        
+        try {
+            debugger;
+
+            switch (Vendor) {
+                case "ct_recordkeepervendorid":
+                    var recordKeeperVendorId = FormScriptingHelper.getLookupValue("ct_recordkeepervendorid");
+                    if (isOnLoad == false && DoingOnChangeContactforVendor == false)
+                    {
+                        FormScriptingHelper.clearLookupField("ct_recordkeeperid");
+                        clearContactFilter("ct_recordkeeperid")                 // Clear any filter on ct_recordkeeperid - to show all active contacts
+                    }     
+
+                    if (recordKeeperVendorId != null)
+                    {
+                        //filterVendorByRoles(recordKeeperVendorId, "ct_recordkeepervendorid");
+                        filterContactsByVendorId(recordKeeperVendorId, "ct_recordkeeperid");
+                        FormScriptingHelper.makeFieldRequired("ct_recordkeeperid");   
+                    } else
+                    {
+                        FormScriptingHelper.makeFieldOptional("ct_recordkeeperid");
+                        //filterContactByVendorsRole("Recordkeeper", "ct_recordkeeperid");
+                    }              
+                    break;
+
+                case "ct_trusteevendorid":
+                    var trusteevendorid = FormScriptingHelper.getLookupValue("ct_trusteevendorid");
+                    if (isOnLoad == false && DoingOnChangeContactforVendor == false)
+                    {
+                        FormScriptingHelper.clearLookupField("ct_trusteeid");
+                        clearContactFilter("ct_trusteeid")                 // Clear any filter on ct_recordkeeperid - to show all active contacts
+                    }     
+
+                    if (trusteevendorid != null)
+                    {
+                        //filterVendorByRoles(trusteevendorid, "ct_trusteevendorid");
+                        filterContactsByVendorId(trusteevendorid, "ct_trusteeid");
+                        FormScriptingHelper.makeFieldRequired("ct_trusteeid");  
+                    } else {
+                        FormScriptingHelper.makeFieldOptional("ct_trusteeid");
+                        //filterContactByVendorsRole("Trustee", "ct_trusteeid");
+                    }                    
+                    break;
+
+
+                case "ct_custodianvendorid":
+                    var custodianvendorid = FormScriptingHelper.getLookupValue("ct_custodianvendorid");
+                    if (isOnLoad == false && DoingOnChangeContactforVendor == false)
+                    {
+                        FormScriptingHelper.clearLookupField("ct_custodiancid");
+                        clearContactFilter("ct_custodiancid")                 // Clear any filter on ct_recordkeeperid - to show all active contacts
+                    }    
+
+                    if (custodianvendorid != null) {
+                        //filterVendorByRoles(custodianvendorid, "custodianvendorid");
+                        filterContactsByVendorId(custodianvendorid, "ct_custodiancid");
+                        FormScriptingHelper.makeFieldRequired("ct_custodiancid");  
+                    } else {
+                        FormScriptingHelper.makeFieldOptional("ct_custodiancid");  
+                       //filterContactByVendorsRole("Custodian", "ct_custodiancid");
+                    }   
+                    break;
+
+
+                case "ct_insurancecovendorid":
+                    var insurancecovendorid = FormScriptingHelper.getLookupValue("ct_insurancecovendorid");
+                    if (isOnLoad == false && DoingOnChangeContactforVendor == false)
+                    {
+                        FormScriptingHelper.clearLookupField("ct_insurancecoid");
+                        clearContactFilter("ct_insurancecoid")                 // Clear any filter on ct_recordkeeperid - to show all active contacts
+                    }                                     
+
+                    if (insurancecovendorid != null) {
+                        //filterVendorByRoles(insurancecovendorid, "insurancecovendorid");
+                        filterContactsByVendorId(insurancecovendorid, "ct_insurancecoid");
+                        FormScriptingHelper.makeFieldRequired("ct_insurancecoid");  
+                    } else {
+                        FormScriptingHelper.makeFieldOptional("ct_insurancecoid");  
+                        //filterContactByVendorsRole("Insurance", "ct_insurancecoid");
+                    }  
+                    break;
+
+                case "ct_tpavendorid":
+                    var tpavendorid = FormScriptingHelper.getLookupValue("ct_tpavendorid");
+                    if (isOnLoad == false && DoingOnChangeContactforVendor == false)
+                    {
+                        FormScriptingHelper.clearLookupField("ct_tpaid");
+                        clearContactFilter("ct_tpaid")                 // Clear any filter on ct_recordkeeperid - to show all active contacts
+                    }    
+
+                    if (tpavendorid != null) {
+                        //filterVendorByRoles(tpavendorid, "tpavendorid");
+                        filterContactsByVendorId(tpavendorid, "ct_tpaid");
+                        FormScriptingHelper.makeFieldRequired("ct_tpaid");  
+                    } else {
+                        FormScriptingHelper.makeFieldOptional("ct_tpaid");  
+                        //filterContactByVendorsRole("TPA", "ct_tpaid");
+                    }
+                    break;
+                  
+                case "ct_actuaryvendorid":
+                    var actuaryvendorid = FormScriptingHelper.getLookupValue("ct_actuaryvendorid");
+                    if (isOnLoad == false && DoingOnChangeContactforVendor == false)
+                    {
+                        FormScriptingHelper.clearLookupField("ct_actuaryid");
+                        clearContactFilter("ct_actuaryid")                 // Clear any filter on ct_recordkeeperid - to show all active contacts
+                    }   
+
+                    if (actuaryvendorid != null) {
+                        //filterVendorByRoles(actuaryvendorid, "actuaryvendorid");
+                        filterContactsByVendorId(actuaryvendorid, "ct_actuaryid");
+                        FormScriptingHelper.makeFieldRequired("ct_actuaryid");  
+                    } else {
+                        FormScriptingHelper.makeFieldOptional("ct_actuaryid");  
+                        //filterContactByVendorsRole("TPA", "ct_actuaryid");
+                    }
+                    break;
+            }
+            DoingOnChangeContactforVendor = false;
+
+        } catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "OnChange_Vendor_SetFilters");
+            }
+        }
+    }
+
+ 
+    export function filterVendorByRoles(VendorId: any, Vendor: any) {
+        try {
+
+            //var viewId = generateGuid();
+            //var entityName = "contact";
+            //var viewDisplayName = "Vendors";
+            //var viewIsDefault = true;
+
+            //// Define the layoutXml for the lookup view
+            //var layoutXml = "<grid name='resultset' object='1' jump='contactid' select='1' icon='1' preview='1'>" +
+            //    "<row name='result' id='contactid'>" +
+            //    "<cell name='fullname' width='300' />" +
+            //    "</row>" +
+            //    "</grid>";
+
+
+            //if (!VendorId || !VendorId.id) {
+            //    // If no vendor is selected, clear the filter
+            //    clearContactFilter(Contact)
+            //    return;
+            //}
+
+            //var vendorId = VendorId.id.replace("{", "").replace("}", "");
+
+            //// Define the fetchXml to filter contacts related to the selected vendor
+            //var fetchXml = "<fetch version='1.0' output-format='xml-platform' mapping='logical' distinct='false'>" +
+            //    "<entity name='contact'>" +
+            //    "<attribute name='fullname' />" +
+            //    "<attribute name='contactid' />" +
+            //    "<filter>" +
+            //    "<condition attribute='ct_vendorid' operator='eq' value='" + vendorId + "' />" +
+            //    "<condition attribute='statecode' operator='eq' value='0' />" +
+            //    "</filter>" +
+            //    "</entity>" +
+            //    "</fetch>";
+
+            //// Add the custom view to the Contact field
+            //(<Xrm.Controls.LookupControl>FormScriptingHelper.getFormContext().getControl(Contact))
+            //    .addCustomView(viewId, entityName, viewDisplayName, fetchXml, layoutXml, viewIsDefault);
+        } catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "filterVendorByRoles");
+            }
+        }
+    }
+
+    export function filterContactsByVendorId(VendorId: any, Contact: any) {
+        try {
+           
+            var viewId = generateGuid();
+            var entityName = "contact";
+            var viewDisplayName = "Related Contacts";
+            var viewIsDefault = true;
+
+            // Define the layoutXml for the lookup view
+            var layoutXml = "<grid name='resultset' object='1' jump='contactid' select='1' icon='1' preview='1'>" +
+                "<row name='result' id='contactid'>" +
+                "<cell name='fullname' width='300' />" +
+                "</row>" +
+                "</grid>";
+
+            
+        if (!VendorId || !VendorId.id) {
+            // If no vendor is selected, clear the filter
+                clearContactFilter(Contact)
+            return;
+        }
+
+        var vendorId = VendorId.id.replace("{", "").replace("}", "");
+
+        // Define the fetchXml to filter contacts related to the selected vendor
+        var fetchXml = "<fetch version='1.0' output-format='xml-platform' mapping='logical' distinct='false'>" +
+            "<entity name='contact'>" +
+            "<attribute name='fullname' />" +
+            "<attribute name='contactid' />" +
+            "<filter>" +
+            "<condition attribute='ct_vendorid' operator='eq' value='" + vendorId + "' />" +
+            "<condition attribute='statecode' operator='eq' value='0' />" +
+            "</filter>" +
+            "</entity>" +
+            "</fetch>";
+
+            // Add the custom view to the Contact field
+            (<Xrm.Controls.LookupControl>FormScriptingHelper.getFormContext().getControl(Contact))
+                .addCustomView(viewId, entityName, viewDisplayName, fetchXml, layoutXml, viewIsDefault);
+        } catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "filterContactsByVendorId");
+            }
+        }
+    }
+
+
+     
+    export function filterContactByVendorsRole(vendorroles: any, Contact: any) {
+        try {
+
+            debugger; 
+
+            var viewDisplayName = "Related Contacts";
+            var role = 0;
+
+            switch (vendorroles) {
+                case "Recordkeeper":
+                    viewDisplayName = "Related Contacts Recordkeeper";
+                    role = 4; 
+                    break;
+
+                case "Trustee":
+                    viewDisplayName = "Related Contacts Trustee";
+                    role = 6;
+                    break;
+
+                case "Custodian":
+                    viewDisplayName = "Related Contacts Custodian";
+                    role = 2;
+                    break;
+
+                case "Insurance":
+                    viewDisplayName = "Related Contacts Insurance Provider";
+                    role = 3; 
+                    break;
+
+                case "TPA":
+                    viewDisplayName = "Related Contacts TPA";
+                    role = 5; 
+                    break;
+
+                case "Actuary":
+                    viewDisplayName = "Related Contacts Actuary";
+                    role = 1; 
+                    break;
+            }
+
+
+            var viewId = generateGuid();
+            var entityName = "contact";           
+            var viewIsDefault = true;
+
+            // Define the layoutXml for the lookup view
+            var layoutXml = "<grid name='resultset' object='1' jump='contactid' select='1' icon='1' preview='1'>" +
+                "<row name='result' id='contactid'>" +
+                "<cell name='fullname' width='300' />" +
+                "</row>" +
+                "</grid>";
+                              
+            const fetchXml = "<fetch version='1.0' output-format='xml-platform' mapping='logical' distinct='false'>" +
+                "<entity name='contact'>" +
+                "<attribute name='fullname' />" +
+                "<attribute name='contactid' />" +
+                "<link-entity name='ct_vendor' from='ct_vendorid' to='ct_vendorid' link-type='inner' alias='v'>" +
+                "<filter>" +
+                "<condition attribute='ct_vendorroles' operator='contain-values'>" +
+                "<value>" + role + "</value>" +
+                "</condition>" +
+                "</filter>" +
+                "</link-entity>" +
+                "<filter>" +
+                "<condition attribute='statecode' operator='eq' value='0' />" +
+                "</filter>" +
+                "</entity>" +
+                "</fetch>";
+
+
+            const result = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "contacts?fetchXml=" + encodeURIComponent(fetchXml));
+
+            debugger; 
+            // Add the custom view to the Contact field
+            (<Xrm.Controls.LookupControl>FormScriptingHelper.getFormContext().getControl(Contact))
+                .addCustomView(viewId, entityName, viewDisplayName, fetchXml, layoutXml, viewIsDefault);
+        } catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "filterContactByVendorsRole");
+            }
+        }
+    }
+
+    export function clearContactFilter(Contact: any) {
+        try {
+            
+            var viewId = generateGuid();          
+            const entityName = "contact";
+            const viewDisplayName = "All Contacts";
+            const viewIsDefault = true;
+
+            // Define an empty fetchXml to clear the filter
+            const fetchXml = "<fetch version='1.0' output-format='xml-platform' mapping='logical' distinct='false'>" +
+                "<entity name='contact'>" +
+                "<attribute name='fullname' />" +
+                "<attribute name='contactid' />" +
+                "<filter>" +
+                "<condition attribute='statecode' operator='eq' value='0' />" +
+                "</filter>" +
+                "</entity>" +
+                "</fetch>";
+
+            // Define a default layoutXml for the lookup view
+            const layoutXml = "<grid name='resultset' object='1' jump='contactid' select='1' icon='1' preview='1'>" +
+                "<row name='result' id='contactid'>" +
+                "<cell name='fullname' width='300' />" +
+                "</row>" +
+                "</grid>";
+
+            // Clear the custom filter by adding a default view
+            (<Xrm.Controls.LookupControl>FormScriptingHelper.getFormContext().getControl(Contact))
+                .addCustomView(viewId, entityName, viewDisplayName, fetchXml, layoutXml, viewIsDefault);
+        } catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "clearContactFilter");
+            }
+        }
+    }
+
+
+
+    export function OnChange_Contact_SetFilters(Contact: string, isOnLoad: boolean = false) {
+        debugger;
+
+
+        try {
+            switch (Contact) {
+                case "ct_recordkeeperid":
+                    var recordKeeperContactId = FormScriptingHelper.getLookupValue("ct_recordkeeperid");
+                    SetVendorByContactId(recordKeeperContactId, "ct_recordkeepervendorid");  
+                   // if (isOnLoad == false) { FormScriptingHelper.clearLookupField("ct_recordkeepervendorid"); }
+                    break;
+                case "ct_trusteeid":
+                    var trusteeContactid = FormScriptingHelper.getLookupValue("ct_trusteeid");
+                    SetVendorByContactId(trusteeContactid, "ct_trusteevendorid");
+                   // if (isOnLoad == false) { FormScriptingHelper.clearLookupField("ct_trusteevendorid"); }
+                    break;
+                case "ct_custodiancid":
+                    var custodianContactid = FormScriptingHelper.getLookupValue("ct_custodiancid");
+                    SetVendorByContactId(custodianContactid, "ct_custodianvendorid");
+                  //  if (isOnLoad == false) { FormScriptingHelper.clearLookupField("ct_custodianvendorid"); }
+                    break;
+                case "ct_insurancecoid":
+                    var insurancecoContactid = FormScriptingHelper.getLookupValue("ct_insurancecoid");
+                    SetVendorByContactId(insurancecoContactid, "ct_insurancecovendorid");
+                  //  if (isOnLoad == false) { FormScriptingHelper.clearLookupField("ct_insurancecovendorid"); }
+                    break;
+                case "ct_tpaid":
+                    var tpaContactid = FormScriptingHelper.getLookupValue("ct_tpaid");
+                    SetVendorByContactId(tpaContactid, "ct_tpavendorid");
+                   // if (isOnLoad == false) { FormScriptingHelper.clearLookupField("ct_tpavendorid"); }
+                    break;
+                case "ct_actuaryid":
+                    var actuaryContactid = FormScriptingHelper.getLookupValue("ct_actuaryid");
+                    SetVendorByContactId(actuaryContactid, "ct_actuaryvendorid");
+                   // if (isOnLoad == false) { FormScriptingHelper.clearLookupField("ct_actuaryvendorid"); }
+                    break;
+            }
+
+        } catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "OnChange_Contact_SetFilters");
+            }
+        }
+    }
+
+
+
+    export function SetVendorByContactId(Contact: any, Vendor: any)
+    {
+        try
+        {
+            debugger;
+
+            if (Contact != null)
+            {
+                DoingOnChangeContactforVendor = true;
+                var ContactId = Contact.id.replace("{", "").replace("}", "");
+
+                // Build the fetchXml query to retrieve the ct_vendorid field from the contact record
+                var fetchXmlContact = "<fetch version='1.0' output-format='xml-platform' mapping='logical' distinct='false'>" +
+                    "<entity name='contact'>" +
+                    "<attribute name='ct_vendorid' />" +
+                    "<filter>" +
+                    "<condition attribute='contactid' operator='eq' value='" + ContactId + "' />" +
+                    "</filter>" +
+                    "</entity>" +
+                    "</fetch>";
+
+                // Execute the query using the QueryHelper
+                const contactResult = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "contacts?fetchXml=" + encodeURIComponent(fetchXmlContact));
+
+                if (contactResult && contactResult.value && contactResult.value.length > 0) {
+                    const contactRecord = contactResult.value[0];
+                    const ContactvendorId = contactRecord._ct_vendorid_value;
+
+                    if (ContactvendorId) {
+                        // Query the ct_vendor entity using the retrieved vendorId
+                        const fetchXmlVendor = `
+                        <fetch top="1">
+                        <entity name="ct_vendor">
+                            <attribute name="ct_vendorid" />
+                            <attribute name="ct_name" />
+                            <filter>
+                                <condition attribute="ct_vendorid" operator="eq" value="${ContactvendorId}" />
+                            </filter>
+                        </entity>
+                    </fetch>
+                    `;
+
+                        const vendorResult = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "ct_vendors?fetchXml=" + encodeURIComponent(fetchXmlVendor));
+
+                        if (vendorResult && vendorResult.value && vendorResult.value.length > 0) {
+                            const vendorRecord = vendorResult.value[0];
+
+                            // Set the lookup value for ct_recordkeepervendorid                       
+                            FormScriptingHelper.setLookupValue(Vendor, "ct_vendor", vendorRecord.ct_vendorid, vendorRecord.ct_name);                            
+                        }
+                    }
+                } 
+            }            
+        } catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "SetVendorByContactId");
+            }
+        }
+    }
+
+
+
+    function generateGuid(): string {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
+    export function changeAllocationView() {
+        var ptResults = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "ct_plantypes?$select=ct_ssrcategory&$filter=ct_plancode eq " + FormScriptingHelper.getOptionSetValue(ct_planFields.ct_plantype));
+
+        if (ptResults != null && ptResults.value != null && ptResults.value.length > 0) {
+            var ssrcategory = ptResults.value[0].ct_ssrcategory;
+            if (ssrcategory != null && ssrcategory == '206450002') {
+
+                let contactoaccountsubgrid: any = (FormScriptingHelper.getGridControl("Allocations"));
+                contactoaccountsubgrid.getViewSelector().setCurrentView({ entityType: 1039, id: "{05304d95-da01-f111-8406-7ced8dd73066}", name: "Related Asset Allocation Liability Count" });
+            } else {
+                let contactoaccountsubgrid: any = (FormScriptingHelper.getGridControl("Allocations"));
+                contactoaccountsubgrid.getViewSelector().setCurrentView({ entityType: 1039, id: "{df6e46c5-da8e-ea11-a811-000d3a99b6bb}", name: "Related Asset Allocations" });
+            }
+        }
+    }
+
+    // User Story 61249, waiting for business to confirm if this is still needed
+    //export function checkAsciiCharacters() {
+    //    try {
+    //        const planName = FormScriptingHelper.getFieldValue(ct_planFields.ct_planname) as string | null;
+    //        if (!planName) {
+    //            return;
+    //        }
+
+    //        const invalidChars: string[] = [];
+    //        let sanitizedName = "";
+
+    //        for (const character of planName) {
+    //            const codePoint = character.codePointAt(0);
+    //            if (codePoint !== undefined && codePoint <= 127) {
+    //                sanitizedName += character;
+    //            } else {
+    //                invalidChars.push(character);
+    //            }
+    //        }
+
+    //        if (invalidChars.length > 0) {
+    //            if (sanitizedName !== planName) {
+    //                FormScriptingHelper.setValue(ct_planFields.ct_planname, "");
+    //            }
+
+    //            const uniqueInvalidChars = Array.from(new Set(invalidChars));
+    //            FormScriptingHelper.openAlertDialog({
+    //                title: "Invalid Plan Name",
+    //                text: `Invalid Plan Name: Only standard ASCII characters are allowed. The below character(s) are invalid: ${uniqueInvalidChars.join(" ")}`
+    //            });
+    //        }
+    //    }
+    //    catch (err) {
+    //        if (typeof LogHelper.logUiException === "function") {
+    //            LogHelper.logUiException(err, "checkAsciiCharacters");
+    //        }
+    //    }
+    //}
+
+    export function toggleFinancetypeField(calledOnLoad) {
+        const planType = FormScriptingHelper.getOptionSetValue(ct_planFields.ct_plantype);
+        if (
+            planType != null &&
+            (planType === ct_planOptions.ct_plantype._409A_DC ||
+                planType === ct_planOptions.ct_plantype._409A_DB)
+        ) {
+            FormScriptingHelper.showField(ct_planFields.ct_financetype);
+            FormScriptingHelper.makeFieldRequired(ct_planFields.ct_financetype);
+        } else {
+            FormScriptingHelper.hideField(ct_planFields.ct_financetype);
+            FormScriptingHelper.makeFieldOptional(ct_planFields.ct_financetype);
+
+            if (calledOnLoad != true) {
+                FormScriptingHelper.setOptionSetValue(ct_planFields.ct_financetype, null);
+            }
+        }
+    }
+
+    export function getProcessingServicesCasesValueById(planId: string): number | null {
+        try {
+            // Build the Web API URL to get the ct_processingservicescases value for the given planId
+            var url = QueryHelper.getWebApiUrl() +
+                "ct_plans(" + planId + ")?$select=ct_processingservicescases";
+            var result = QueryHelper.webApiRequest(url, QueryHelper.returnJsonObject, false, QueryHelper.defaultErrorFunction);
+
+            if (result && typeof result.ct_processingservicescases !== "undefined" && result.ct_processingservicescases !== null) {
+                return result.ct_processingservicescases;
+            }
+            return null;
+        } catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "getProcessingServicesCasesValueById");
+            }
+            return null;
+        }
+    }
+
+
+    export function onChangeParticipantServiceType(executionContext) {
+        try {
+            var currentPlanId = FormScriptingHelper.removeBrackets(FormScriptingHelper.getEntityId());
+            var clientId = FormScriptingHelper.removeBrackets(FormScriptingHelper.getLookupValue("ct_clientid").id);
+
+            var fullServiceGuid = "1e7d6460-8981-e411-ae7b-00505688000f";
+            var noAtWorkServiceGuid = "bf20ff6d-8981-e411-ae7b-00505688000f";
+
+            var attribute = executionContext.getEventSource();
+            var newValue = attribute.getValue();
+
+            // Only proceed if changing from Full Service (last non-null) to No At Work Service
+            if (
+                onLoadPASServiceType &&
+                onLoadPASServiceType[0] &&
+                FormScriptingHelper.removeBrackets(onLoadPASServiceType[0].id).toLowerCase() === fullServiceGuid &&
+                newValue &&
+                newValue[0] &&
+                FormScriptingHelper.removeBrackets(newValue[0].id).toLowerCase() === noAtWorkServiceGuid
+            ) {
+                // 1. Query for active payroll integrations
+                var payrollUrl = QueryHelper.getWebApiUrl() +
+                    "ct_payrollintegrations?$select=ct_payrollintegrationid&$filter=_ct_clientid_value eq '" + clientId +
+                    "' and (ct_integrationstatus eq 100000004 or ct_integrationstatus eq 100000005)";
+
+                var payrollResult = QueryHelper.webApiRequest(payrollUrl, QueryHelper.returnJsonObject, false, QueryHelper.defaultErrorFunction);
+                var hasConnectedPayrollIntegration = payrollResult && payrollResult.value && payrollResult.value.length > 0;
+
+                // If no active payroll integrations, allow the change
+                if (!hasConnectedPayrollIntegration) {
+                    return;
+                }
+
+                // 2. If there are active payroll integrations, check for other plans with "Full Service"
+                var planUrl = QueryHelper.getWebApiUrl() +
+                    "ct_plans?$select=ct_passervicetype&$filter=_ct_clientid_value eq '" + clientId +
+                    "' and ct_planid ne '" + currentPlanId +
+                    "' and _ct_passervicetype_value eq '" + fullServiceGuid +
+                    "' and statecode eq 0";
+
+                var planResult = QueryHelper.webApiRequest(planUrl, QueryHelper.returnJsonObject, false, QueryHelper.defaultErrorFunction);
+                var hasFullService = planResult && planResult.value && planResult.value.length > 0;
+
+                // If no other plans with Full Service, block the change and prompt the user
+                if (!hasFullService) {
+                    Xrm.Navigation.openAlertDialog({
+                        title: "Unenroll Payroll Integrations",
+                        text: "No other plans for this client have 'Full Service' as Participant Service Type.\n\n" +
+                            "To proceed, please unenroll from all existing payroll integration connections for this client:\n" +
+                            "1. Navigate to the payroll integration(s) related to this client.\n" +
+                            "2. For each integration, select the \"Unenroll Connection\" button on the ribbon.\n" +
+                            "3. After all payroll integrations are unenrolled, you may retry this change."
+                    });
+
+                    // Revert the value to the previous one
+                    attribute.setValue(onLoadPASServiceType);
+
+                    return;
+                }
+
+                // If we reach here, the change is allowed, so update the onLoadPASServiceType
+                onLoadPASServiceType = attribute.getValue();
+            }
+        } catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onChangeParticipantServiceType");
+            }
+        }
+    }
+
+    export function hideCaptrustServiceTab() {
+        try {
+            // PROCESS TEAM - Schedule of Services
+            let processteamSOS = FormScriptingHelper.CheckUserinTeamwithteamid("dcbd8351-be76-f011-b4cb-7c1e527e23f8");
+            if (processteamSOS != null && processteamSOS) {
+                if (FormScriptingHelper.getFormType() === 1 /* XrmEnum.FormType.Create */) {
+                    FormScriptingHelper.hideTab(tabCaptrustService);
+                } else {
+                    FormScriptingHelper.showTab(tabCaptrustService);
+                }
+            }
+            else {
+                FormScriptingHelper.hideTab(tabCaptrustService);
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "hideCaptrustServiceTab error");
+            }
+        }
+    }
+
+    export function DiscTab() {
+        try {
+
+            let type = FormScriptingHelper.getOptionSetValue(ct_planFields.ct_planleadopptclient);
+            let discType = FormScriptingHelper.getOptionSetValue(ct_planFields.ct_discretionarytype);
+            if ((type == ct_planOptions.ct_planleadopptclient.Client) &&
+                (discType == ct_planOptions.ct_discretionarytype._3_38__PlanLevelOnly ||
+                    discType == ct_planOptions.ct_discretionarytype._3_38__DirectFiduciaryVanguard ||
+                    discType == ct_planOptions.ct_discretionarytype._3_38__PlanLevel_3_38_AllocationModels ||
+                    discType == ct_planOptions.ct_discretionarytype._3_38__AllocationModelsOnly ||
+                    discType == ct_planOptions.ct_discretionarytype._3_38_Freedom401kProviderLink ||
+                    discType == ct_planOptions.ct_discretionarytype._3_38_Freedom401kFORS ||
+                    discType == ct_planOptions.ct_discretionarytype._3_38_DirectFiduciaryTIAA ||
+                    discType == ct_planOptions.ct_discretionarytype._3_38__DirectFiduciaryTRP_HybridTDF ||
+                    discType == ct_planOptions.ct_discretionarytype._3_38__DirectFiduciaryTRP_ActiveTDF ||
+                    discType == ct_planOptions.ct_discretionarytype._3_38__DirectFiduciaryTIAA_Enhanced ||
+                    discType == ct_planOptions.ct_discretionarytype._3_38__NADAAffinityClassic ||
+                    discType == ct_planOptions.ct_discretionarytype._3_38__NADAAffinityChoice ||
+                    discType == ct_planOptions.ct_discretionarytype.DiscretionaryNon_ERISA
+                )) {
+                FormScriptingHelper.showTab("Discretionary Plan Management");
+            }
+            else {
+                FormScriptingHelper.setTextboxValue("ct_discretionaryplanauditresults", null);
+                FormScriptingHelper.hideTab("Discretionary Plan Management");
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "SetBIFrame");
+            }
+        }
+    }
+    function SetBIFrame(executionContext) {
+        try {
+            var formContext = executionContext.getFormContext();
+            var pbiFrame = formContext.getControl("IFRAME_PlanDataHealth");
+            var GUID = FormScriptingHelper.getEntityId();
+
+            if (FormScriptingHelper.getEntityId() !== null && pbiFrame != null) {
+                //replace the Power BI url with the url from the Embed step
+                var PBIurl = QueryHelper.getParameterValue("53590F98-B6FF-ED11-8F6E-00224827B7C7").ct_value; //System Parameter Guid For Data Health Embedded Report
+                //accounts = account table in BI, and accountid=guid for account
+                pbiFrame.setSrc(PBIurl + "&filter=PlanData/ct_planid eq '" + GUID + "'");
+            }
+
+
+            var pbiHedgingAnalysisFrame = formContext.getControl("IFRAME_HedgingAnalysis");
+            if (FormScriptingHelper.getEntityId() !== null && pbiHedgingAnalysisFrame != null) {
+                //replace the Power BI url with the url from the Embed step
+                var PBIurl = QueryHelper.getParameterValue("d76d8061-619d-f011-b41b-0022483304fe").ct_value; //System Parameter Guid For Data Health Embedded Report
+                //accounts = account table in BI, and accountid=guid for account
+                pbiHedgingAnalysisFrame.setSrc(PBIurl + "&filter=AssetAllocations/ct_planid eq '" + GUID + "'");
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "SetBIFrame");
+            }
+        }
+    }
+
+
+    export function onSave(executionContext) {
+        try {
+
+            if (FormScriptingHelper.getFormContext().ui.getFormType() === 1 /* XrmEnum.FormType.Create */) {
+                if (FormScriptingHelper.getLookupValue("ct_lead") != null) {
+                    FormScriptingHelper.setOptionSetValue("ct_planleadopptclient", 1); // Default to Lead                    
+                }
+                if (FormScriptingHelper.getLookupValue("ct_opportunity") != null) {
+                    FormScriptingHelper.setOptionSetValue("ct_planleadopptclient", 2); // Default to Opportunity                    
+                }
+                if ((FormScriptingHelper.getLookupValue("ct_lead") == null) &&
+                    (FormScriptingHelper.getLookupValue("ct_opportunity") == null)) {
+                    FormScriptingHelper.setOptionSetValue("ct_planleadopptclient", 3); // Default to Client
+                }
+            } else {
+                var formName = FormScriptingHelper.getFormContext().ui.formSelector.getCurrentItem().getLabel();
+                if (formName == "Plan-Opportunities") {
+                    if (discretionarytype_plantype_changed == true) {
+                        var planId = FormScriptingHelper.removeBrackets(FormScriptingHelper.getEntityId());
+                        var processingServicesCasesValue = getProcessingServicesCasesValueById(planId);
+
+                        if (processingServicesCasesValue === 1)  // Approval Pathways - Running
+                        {
+                            // Cancel the save operation
+                            var saveEvent = executionContext.getEventArgs();
+                            saveEvent.preventDefault();
+
+
+                            // Get Plans ct_processingservicescases field status if Yes - Processing Services and Cases plugins cancel message and cancel save.
+                            FormScriptingHelper.openAlertDialog({ title: "In Progress", text: "Services are currently being updated. Please refresh and try again." });
+                        }
+                    }
+                }
+            }
+
+            changeAllocationView();
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onSave");
+            }
+        }
+    }
+
+
+    export function onLoadRedirect() {
+        var newForm;
+        if (FormScriptingHelper.getFormType() === 1 /* Create */) {
+            if (FormScriptingHelper.getLookupValue("ct_opportunity") != null) {
+                newForm = "Plan-Opportunities";
+            }
+            else if (FormScriptingHelper.getLookupValue(("ct_lead")) != null) {
+                newForm = "Plan-Lead";
+            }
+            else {
+                newForm = "Plan";
+            }
+        }
+        else {
+            if (FormScriptingHelper.getSelectedOption("ct_planleadopptclient") != null) {
+                var LOC = FormScriptingHelper.getSelectedOption("ct_planleadopptclient").text;
+                try {
+                    if (LOC != null) {
+                        switch (LOC) {
+                            case "Client":
+                                newForm = "Plan";
+                                break;
+                            case "Opportunity":
+                                newForm = "Plan-Opportunities";
+                                break;
+                            default:
+                                newForm = "Plan-Lead";
+                                break;
+                        }
+                    }
+                }
+                catch (err) {
+                    if (typeof LogHelper.logUiException === "function") {
+                        LogHelper.logUiException(err, "onLoadRedirect");
+                    }
+                }
+            }
+            else {
+                newForm = "Plan";
+            }
+        }
+        if (FormScriptingHelper.getFormContext().ui.formSelector.getCurrentItem().getLabel() != newForm) {
+            SwitchPlanForms = true;
+            var items = FormScriptingHelper.getFormContext().ui.formSelector.items.get();
+            for (var i in items) {
+                var item = items[i];
+                var itemId = item.getId();
+                var itemLabel = item.getLabel();
+                if (itemLabel == newForm) {
+                    item.navigate(); //navigate to the form
+                }
+            }
+        }
+        switch (newForm) {
+            case "Plan":
+                disableFormSelector("Plan-Opportunities");
+                disableFormSelector("Plan-Lead");
+                break;
+            case "Plan-Opportunities":
+                disableFormSelector("Plan");
+                disableFormSelector("Plan-Lead");
+                break;
+            case "Plan-Lead":
+                disableFormSelector("Plan");
+                disableFormSelector("Plan-Opportunities");
+                break;
+        }
+    }
+
+
+    function disableFormSelector(newForm) {
+        FormScriptingHelper.getFormContext().ui.formSelector.items.get().forEach(function (item, index) {
+            // hide all the form apart from Opportunity.
+            if (item.getLabel() != newForm) {
+                item.setVisible(false);
+            }
+        });
+
+    }
+
+    export function onChangeReportingType() {
+        try {
+            if (checkReportingType()) {
+                FormScriptingHelper.enableField(ct_planFields.ct_reportingdescription);
+                FormScriptingHelper.makeFieldRequired(ct_planFields.ct_reportingdescription);
+            }
+            else {
+                FormScriptingHelper.setValue(ct_planFields.ct_reportingdescription, "");
+                FormScriptingHelper.disableField(ct_planFields.ct_reportingdescription);
+                FormScriptingHelper.makeFieldOptional(ct_planFields.ct_reportingdescription);
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onChangeReportingType");
+            }
+        }
+    }
+
+    export function checkReportingType() {
+        try {
+            var reportType = FormScriptingHelper.getSelectedOption(ct_planFields.ct_reportingtype);
+            if (reportType !== null) {
+                if (reportType.value === ct_planOptions.ct_reportingtype.Non_StandardReporting ||
+                    reportType.value === ct_planOptions.ct_reportingtype.Legacy)
+                    return true;
+                else
+                    return false;
+            }
+            return false;
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onChangeReportingType");
+                return false;
+        }
+            }
+        return false;
+    }
+
+    export function OncashreserveexpirationChange() {
+        "use strict";
+
+        try {
+            if (FormScriptingHelper.getFieldValue(ct_planFields.ct_cashreserveexpiration) == true) {
+                FormScriptingHelper.makeFieldRequired(ct_planFields.ct_cashreserveexpirationdate);
+            }
+            else {
+                FormScriptingHelper.makeFieldOptional(ct_planFields.ct_cashreserveexpirationdate);
+            }
+
+
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "OncashreserveexpirationChange");
+            }
+        }
+    }
+
+
+    //This is called from Plan SubGrid ribbon -> Use Existing Plan (only show Opportunity Plans)
+    export function PlanGridUseExistingPlan(SelectedEntityTypeCode, SelectedControl) {
+        try {
+            alert("In PlanGridUseExistingPlan function of PlanForm.ts");
+            Mscrm.GridRibbonActions.addExistingFromSubGridStandard(SelectedEntityTypeCode, SelectedControl); // Call the OOB           
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "UserAdvisorsCheck");
+            }
+        }
+    }
+
+
+    export function OnTypeChange(): void {
+        try {
+
+            if (FormScriptingHelper.getFormType() != XrmEnum.FormType.Create && FormScriptingHelper.isDirty(ct_planFields.ct_plantype)) {
+                alert("If you change the Plan Type, a new default Report Spec will be created. The existing Report Spec will be deactivated");
+            }
+        } catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "OnTypeChange");
+            }
+        }
+    }
+
+    export function SetMessageLabel() {
+        let msg: string = FormScriptingHelper.getFieldValue(ct_planFields.ct_popupmessage);
+        if (msg != null) {
+            FormScriptingHelper.setTabLabel("Popup Message", "**" + FormScriptingHelper.getTabLabel("Popup Message"));
+        }
+
+        let Audit: string = FormScriptingHelper.getFieldValue(ct_planFields.ct_discretionaryplanauditresults);
+        if (Audit != null && Audit.length > 50) {
+            FormScriptingHelper.setTabLabel("Discretionary Plan Management", "**" + FormScriptingHelper.getTabLabel("Discretionary Plan Management"));
+        }
+    }
+
+    export function onContractChange() {
+        try {
+            var contractOnFile = FormScriptingHelper.getFieldValue(ct_planFields.ct_contractonfile);
+            if (contractOnFile === false || contractOnFile === null) {
+                var message = "This action will remove all Fee Disclosure data for this plan. Would you like to continue?";
+                FormScriptingHelper.openAlertDialog({ text: message }, null, function () {
+                    //OK
+                    FormScriptingHelper.setDateField(ct_planFields.ct_contractdate, null);
+                    FormScriptingHelper.makeFieldOptional(ct_planFields.ct_contractdate);
+                    FormScriptingHelper.setDateField(ct_planFields.ct_deliverydate, null);
+                    FormScriptingHelper.hideField(ct_planFields.ct_contractdate);
+                    FormScriptingHelper.hideField(ct_planFields.ct_deliverydate);
+                    FormScriptingHelper.hideField(ct_planFields.ct_receivingfees);
+                }, function () {
+                    //Cancel
+                    FormScriptingHelper.setCheckboxValue(ct_planFields.ct_contractonfile, true);
+                });
+            }
+            else {
+                FormScriptingHelper.showField(ct_planFields.ct_contractdate);
+                FormScriptingHelper.makeFieldRequired(ct_planFields.ct_contractdate);
+                FormScriptingHelper.showField(ct_planFields.ct_deliverydate);
+                FormScriptingHelper.showField(ct_planFields.ct_receivingfees);
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onContractChange");
+            }
+        }
+    }
+
+    export function onFinanceChange() {
+        try {
+            var fundedValue = FormScriptingHelper.getFieldValue(ct_planFields.ct_financetype) !== null ? true : false;
+            FormScriptingHelper.setCheckboxValue(ct_planFields.ct_funded, fundedValue);
+        } catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onFinanceChange");
+            }
+        }
+    }
+
+
+    export function onChange_Oppt_Discretionarytype() {
+        try {
+
+            if (FormScriptingHelper.getFormContext().ui.getFormType() != XrmEnum.FormType.Create) {
+                if (Current_ct_discretionarytype != FormScriptingHelper.getOptionSetValue(ct_planFields.ct_discretionarytype)) {
+                    FormScriptingHelper.openAlertDialog({ title: "Discretionary Changed", text: "Changing the discretionary type will reset selected services." });
+                    discretionarytype_plantype_changed = true;
+                    Current_ct_discretionarytype = FormScriptingHelper.getOptionSetValue(ct_planFields.ct_discretionarytype);
+                }
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onChange_Oppt_Discretionarytype");
+            }
+        }
+    }
+
+
+    export function OnChange_Oppt_PlanType() {
+        try {
+            if (FormScriptingHelper.getFormContext().ui.getFormType() != XrmEnum.FormType.Create) {
+                if (Current_ct_plantype != FormScriptingHelper.getOptionSetValue(ct_planFields.ct_plantype)) {
+                    FormScriptingHelper.openAlertDialog({ title: "Plan Type Changed", text: "Changing the plan type will reset selected services." });
+                    discretionarytype_plantype_changed = true;
+                    Current_ct_plantype = FormScriptingHelper.getOptionSetValue(ct_planFields.ct_plantype);
+                }
+            }
+            toggleFinancetypeField(false);
+            setErisaForNonQualifiedPlans();
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "OnChange_Oppt_PlanType");
+            }
+        }
+    }
+
+
+    export function setErisaForNonQualifiedPlans(): void {
+        const planType = FormScriptingHelper.getOptionSetValue(ct_planFields.ct_plantype);
+        const nonQualifiedTypes = [
+            ct_planOptions.ct_plantype._409A_DC,
+            ct_planOptions.ct_plantype._409A_DB,
+            ct_planOptions.ct_plantype._457_b__Non_Gov_t,
+            ct_planOptions.ct_plantype._457_f_
+        ];
+
+        if (!planType) {
+            FormScriptingHelper.setOptionSetValue(ct_planFields.ct_erisa, null);
+            FormScriptingHelper.enableField(ct_planFields.ct_erisa);
+        } else {
+            if (planType != null && nonQualifiedTypes.indexOf(planType) !== -1) {
+                FormScriptingHelper.setOptionSetValue(ct_planFields.ct_erisa, ct_planOptions.ct_erisa.Non_Qualified);
+                FormScriptingHelper.disableField(ct_planFields.ct_erisa);
+            } else {
+                //FormScriptingHelper.setOptionSetValue(ct_planFields.ct_erisa, ct_planOptions.ct_erisa.Qualified);
+                FormScriptingHelper.enableField(ct_planFields.ct_erisa);
+            }
+        }
+    }
+
+    export function onChangeDiscretionarytype() {
+        try {
+
+            alert("Warning! If this plan is part of a Fund Change Process and you change the Discretionary Type, all mapping and confirmation entered in an active Fund Change Process will be removed when you return to Mapping & Execution.");
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onChangeDiscretionarytype");
+            }
+        }
+    }
+
+    export function onChangePlantype() {
+        try {
+            var planType = FormScriptingHelper.getSelectedOption(ct_planFields.ct_plantype);
+            if (planType !== null) {
+                if (planType.value === ct_planOptions.ct_plantype._457_b__Gov_t ||
+                    planType.value === ct_planOptions.ct_plantype._409A_DB ||
+                    planType.value === ct_planOptions.ct_plantype._457_f_ ||
+                    planType.value === ct_planOptions.ct_plantype._457_b__Non_Gov_t ||
+                    planType.value === ct_planOptions.ct_plantype._162Bonus ||
+                    planType.value === ct_planOptions.ct_plantype._409A_DC ||
+                    planType.value === ct_planOptions.ct_plantype._415_m_) {
+                    FormScriptingHelper.setOptionSetValue(ct_planFields.ct_erisa,
+                        ct_planOptions.ct_erisa.Non_Qualified);
+                }
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onChangePlantype");
+            }
+        }
+    }
+
+    export function onChangeAllocationTools(IsOnLoad) {
+        try {
+            FormScriptingHelper.hideField(ct_planFields.ct_triggerage);
+            FormScriptingHelper.makeFieldOptional(ct_planFields.ct_triggerage);
+            var hasDynamic = 0;
+            var allocationtools = FormScriptingHelper.getMultiOptionSetValue(ct_planFields.ct_allocationtools);
+            if (allocationtools !== null) {
+                for (var i = 0; i < allocationtools.length; i++) {
+                    if (allocationtools[i].text == "Blueprint Managed Advice – Dynamic QDIA" || allocationtools[i].text == "Third Party Managed Account – Dynamic QDIA") {
+                        hasDynamic = 1;
+                    }
+                }
+                if (hasDynamic) {
+                    FormScriptingHelper.showField(ct_planFields.ct_triggerage);
+                    FormScriptingHelper.makeFieldRequired(ct_planFields.ct_triggerage);
+                    }
+                else {
+                    var noTriggerAge = null;
+                    if (IsOnLoad != true) {
+                        FormScriptingHelper.setValue(ct_planFields.ct_triggerage, noTriggerAge);
+                    }
+                }
+            }
+            else {
+                var noTriggerAge = null;
+                if (IsOnLoad != true) {
+                    FormScriptingHelper.setValue(ct_planFields.ct_triggerage, noTriggerAge);
+                }
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onChangeAllocationTools");
+            }
+        }
+    }
+
+    //If Prototype is Checked, Show Document Sponsor, else clear document sponsor
+    export function changePrototype() {
+        try {
+            var chk = FormScriptingHelper.getFieldValue(ct_planFields.ct_prototype);
+            if (chk === false) {
+                FormScriptingHelper.hideField(ct_planFields.ct_documentsponsor);
+                FormScriptingHelper.setTextboxValue(ct_planFields.ct_documentsponsor, null);
+            }
+            else {
+                FormScriptingHelper.showField(ct_planFields.ct_documentsponsor);
+            }
+            ;
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "changePrototype");
+            }
+        }
+    }
+
+    export function getSeismicTeamDetails(executionContext) {
+        try {
+            var InSeismicTeam = false;
+            var SeismicTeamId = "";
+            var GUID = FormScriptingHelper.getEntityId();
+            var userID = FormScriptingHelper.getUserId();
+            userID = FormScriptingHelper.removeBrackets(userID);
+            //GET "SEISMIC TEAM" CT_SYSTEMPARAMETER RECORD
+            const SEISMIC_TeamId = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() +
+                "ct_systemparameters" +
+                "?$select=ct_name, ct_value&$filter=ct_systemparameterid eq " +
+                "3F81DCA4-5275-EC11-8943-00224827C671");
+            if (SEISMIC_TeamId != null) {
+                for (var ii = 0; ii < SEISMIC_TeamId.value.length; ii++) {
+                    SeismicTeamId = SEISMIC_TeamId.value[ii]["ct_value"];
+                }
+            }
+
+            const SeismicResult = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "teams?fetchXml=%3Cfetch%20version%3D%221.0%22%20output-format%3D%22xml-platform%22%20mapping%3D%22logical%22%20distinct%3D%22true%22%3E%3Centity%20name%3D%22team%22%3E%3Cattribute%20name%3D%22name%22%20%2F%3E%3Cattribute%20name%3D%22businessunitid%22%20%2F%3E%3Cattribute%20name%3D%22teamid%22%20%2F%3E%3Cattribute%20name%3D%22teamtype%22%20%2F%3E%3Corder%20attribute%3D%22name%22%20descending%3D%22false%22%20%2F%3E%3Cfilter%20type%3D%22and%22%3E%3Ccondition%20attribute%3D%22ct_teamdescription%22%20operator%3D%22eq%22%20value%3D%223%22%20%2F%3E%3C%2Ffilter%3E%3Clink-entity%20name%3D%22teammembership%22%20from%3D%22teamid%22%20to%3D%22teamid%22%20visible%3D%22false%22%20intersect%3D%22true%22%3E%3Clink-entity%20name%3D%22systemuser%22%20from%3D%22systemuserid%22%20to%3D%22systemuserid%22%20alias%3D%22ab%22%3E%3Cfilter%20type%3D%22and%22%3E%3Ccondition%20attribute%3D%22systemuserid%22%20operator%3D%22eq%22%20uitype%3D%22systemuser%22%20value%3D%22%7B" + userID + "%7D%22%20%2F%3E%3C%2Ffilter%3E%3C%2Flink-entity%3E%3C%2Flink-entity%3E%3C%2Fentity%3E%3C%2Ffetch%3E");
+            if (SeismicResult) {
+                for (var ii = 0; ii < SeismicResult.value.length; ii++) {
+                    const seismicRoleId = SeismicResult.value[ii].teamid;
+                    if (seismicRoleId.toLowerCase() === SeismicTeamId.toLowerCase()) {
+                        InSeismicTeam = true;
+                        break;
+                    }
+                }
+            }
+            FormScriptingHelper.hideTab(tabSeismic);
+            if (InSeismicTeam) {
+                FormScriptingHelper.showTab(tabSeismic);
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "getSeismicTeamDetails");
+            }
+            return true;
+        }
+    }
+
+    export function getTeamDetails() {
+        try {
+            var In_PROCESS_TEAM_DC_Quarterly_Audit = false;
+            let TeamId_PROCESS_TEAM_DC_Quarterly_Audit = "8d58b169-bae6-ee11-904d-0022482a4580"; // PROCESS TEAM - DC Quarterly Audit
+
+            var InTeam = false;
+            var TeamId = '';
+            var userID = FormScriptingHelper.getUserId();
+            userID = FormScriptingHelper.removeBrackets(userID);
+            //GET "SECURITY TEAM Finance" CT_SYSTEMPARAMETER RECORD.
+            var results = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "ct_systemparameters" + "?$select=ct_name, ct_value&$filter=ct_systemparameterid eq " + '4724A4A4-B7D0-E911-A82F-000D3A1780A6');
+            var i;
+            if (results != null) {
+                for (i = 0; i < results.value.length; i++) {
+                    TeamId = results.value[i]["ct_value"];
+                }
+            }
+            var result = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "systemusers(" + userID + ")?$select=address1_addressid&$expand=teammembership_association($select = name, teamid)");
+            for (i = 0; i < result.teammembership_association.length; i++) {
+                var teamRoleId = result.teammembership_association[i]["teamid"];
+                if (teamRoleId.toLowerCase() == TeamId.toLowerCase()) {
+                    InTeam = true;
+                }
+
+                if (teamRoleId.toLowerCase() == TeamId_PROCESS_TEAM_DC_Quarterly_Audit.toLowerCase()) {
+                    In_PROCESS_TEAM_DC_Quarterly_Audit = true;
+            }
+
+            }
+            if (InTeam) {
+                FormScriptingHelper.enableField(ct_planFields.ct_feescheduleid);
+            }
+            else {
+                FormScriptingHelper.disableField(ct_planFields.ct_feescheduleid);
+            }
+
+            if (In_PROCESS_TEAM_DC_Quarterly_Audit) {
+                FormScriptingHelper.showField("ct_auditcommentary");
+            }
+            else {
+                FormScriptingHelper.hideField("ct_auditcommentary");
+            }
+
+
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "getTeamDetails");
+            }
+            return true;
+        }
+    }
+
+    export function onPlanTypeChange(IsOnLoad) {
+        try {
+            var plantypedesc;
+            var planType = FormScriptingHelper.getSelectedOption(ct_planFields.ct_plantype);
+            if (planType === null) {
+                return;
+            }
+            var planTypeValue = FormScriptingHelper.getSelectedOption(ct_planFields.ct_plantype).value;
+            var results = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + ct_plantypeFields.entitySetName + "?$select=ct_description&$filter=ct_plancode eq " + planTypeValue);
+            if (results != null) {
+                for (var i = 0; i < results.value.length; i++) {
+                    plantypedesc = results.value[i]["ct_description"];
+                }
+            }
+
+            if (planTypeValue == ct_planOptions.ct_plantype._401_a_ ||
+                planTypeValue == ct_planOptions.ct_plantype._401_k_ ||
+                planTypeValue == ct_planOptions.ct_plantype._403_a__DC ||
+                planTypeValue == ct_planOptions.ct_plantype._403_b_ ||
+                planTypeValue == ct_planOptions.ct_plantype._409A_DB ||
+                planTypeValue == ct_planOptions.ct_plantype._409A_DC ||
+                planTypeValue == ct_planOptions.ct_plantype._415_m_ ||
+                planTypeValue == ct_planOptions.ct_plantype._457_b__Gov_t ||
+                planTypeValue == ct_planOptions.ct_plantype._457_b__Non_Gov_t ||
+                planTypeValue == ct_planOptions.ct_plantype._457_f_ ||
+                planTypeValue == ct_planOptions.ct_plantype.CanadianRRSP ||
+                planTypeValue == ct_planOptions.ct_plantype.ChurchPlan ||
+                planTypeValue == ct_planOptions.ct_plantype.CorporateCashBalance ||
+                planTypeValue == ct_planOptions.ct_plantype.CorporatePension ||
+                planTypeValue == ct_planOptions.ct_plantype.DB_CashBalance ||
+                planTypeValue == ct_planOptions.ct_plantype.ESOP ||
+                planTypeValue == ct_planOptions.ct_plantype.MPPEmployeeDirected ||
+                planTypeValue == ct_planOptions.ct_plantype.MPPEmployerDirected ||
+                planTypeValue == ct_planOptions.ct_plantype.PartnershipCashBalance ||
+                planTypeValue == ct_planOptions.ct_plantype.PSP ||
+                planTypeValue == ct_planOptions.ct_plantype.PuertoRico ||
+                planTypeValue == ct_planOptions.ct_plantype.SIMPLEIRA ||
+                planTypeValue == ct_planOptions.ct_plantype.TaftHartley ||
+                planTypeValue == ct_planOptions.ct_plantype.SARSEP ||
+                planTypeValue == ct_planOptions.ct_plantype.SEP ||
+                planTypeValue == ct_planOptions.ct_plantype.SIMPLE401_k_) {
+                FormScriptingHelper.showField("ct_annuitysolutionsoffered");
+            }
+            else {
+                FormScriptingHelper.hideField("ct_annuitysolutionsoffered");
+                FormScriptingHelper.setOptionSetValue("ct_annuitysolutionsoffered", null);
+            }
+
+
+
+
+            if (planTypeValue == ct_planOptions.ct_plantype.PSP ||
+                planTypeValue == ct_planOptions.ct_plantype.SARSEP ||
+                planTypeValue == ct_planOptions.ct_plantype.SEP ||
+                planTypeValue == ct_planOptions.ct_plantype.SIMPLE401_k_ ||
+                planTypeValue == ct_planOptions.ct_plantype.TB ||
+                planTypeValue == ct_planOptions.ct_plantype.VariableAnnuity ||
+                planTypeValue == ct_planOptions.ct_plantype.VEBA ||
+                planTypeValue == ct_planOptions.ct_plantype._403_a__DC ||
+                planTypeValue == ct_planOptions.ct_plantype._401_k_ ||
+                planTypeValue == ct_planOptions.ct_plantype.DB_CashBalance ||
+                planTypeValue == ct_planOptions.ct_plantype.CorporatePension ||
+                planTypeValue == ct_planOptions.ct_plantype.ESOP ||
+                planTypeValue == ct_planOptions.ct_plantype.MPPEmployeeDirected) {
+                FormScriptingHelper.setOptionSetValue(ct_planFields.ct_category, ct_planOptions.ct_category.Retirement);
+            }
+            if (planTypeValue == ct_planOptions.ct_plantype.CorpCash ||
+                planTypeValue == ct_planOptions.ct_plantype.PublicEndowmentorFoundation) {
+                FormScriptingHelper.setOptionSetValue(ct_planFields.ct_category, ct_planOptions.ct_category.Corporation);
+            }
+            if (planTypeValue == ct_planOptions.ct_plantype.VEBA) {
+                FormScriptingHelper.setOptionSetValue(ct_planFields.ct_servicetype, ct_planOptions.ct_servicetype.Consulting);
+            }
+            if (planTypeValue == ct_planOptions.ct_plantype._457_b__Gov_t ||
+                planTypeValue == ct_planOptions.ct_plantype._409A_DB ||
+                planTypeValue == ct_planOptions.ct_plantype._457_f_ ||
+                planTypeValue == ct_planOptions.ct_plantype._162Bonus ||
+                planTypeValue == ct_planOptions.ct_plantype._457_b__Non_Gov_t ||
+                planTypeValue == ct_planOptions.ct_plantype._415_m_ ||
+                planTypeValue == ct_planOptions.ct_plantype.SIMPLEIRA ||
+                planTypeValue == ct_planOptions.ct_plantype._409A_DC) {
+                FormScriptingHelper.setOptionSetValue(ct_planFields.ct_erisa, ct_planOptions.ct_erisa.Non_Qualified);
+            }
+            if (planTypeValue == ct_planOptions.ct_plantype.PSP ||
+                planTypeValue == ct_planOptions.ct_plantype.SARSEP ||
+                planTypeValue == ct_planOptions.ct_plantype.SEP ||
+                planTypeValue == ct_planOptions.ct_plantype.SIMPLE401_k_ ||
+                planTypeValue == ct_planOptions.ct_plantype.TB ||
+                planTypeValue == ct_planOptions.ct_plantype.VariableAnnuity ||
+                planTypeValue == ct_planOptions.ct_plantype.VEBA ||
+                planTypeValue == ct_planOptions.ct_plantype._403_a__DC ||
+                planTypeValue == ct_planOptions.ct_plantype._401_k_ ||
+                planTypeValue == ct_planOptions.ct_plantype.DB_CashBalance ||
+                planTypeValue == ct_planOptions.ct_plantype.CorporatePension ||
+                planTypeValue == ct_planOptions.ct_plantype.ESOP ||
+                planTypeValue == ct_planOptions.ct_plantype.MPPEmployeeDirected) {
+                FormScriptingHelper.setOptionSetValue(ct_planFields.ct_erisa, ct_planOptions.ct_erisa.Qualified);
+            }
+            if (planTypeValue == ct_planOptions.ct_plantype.CorpCash ||
+                planTypeValue == ct_planOptions.ct_plantype.PublicEndowmentorFoundation) {
+                FormScriptingHelper.setOptionSetValue(ct_planFields.ct_erisa, null);
+            }
+            //var bothControls = Xrm.Page.getAttribute('ct_modelpurchaseoneclick').controls;
+            FormScriptingHelper.hideField("ct_modeltypeid");
+            FormScriptingHelper.hideField("ct_captrustmodels");
+            FormScriptingHelper.hideField("ct_modelpurchaseoneclick");
+            // DC
+            if (plantypedesc == "DC") {
+                FormScriptingHelper.showSection(tabServiceProviders, sectionTpaProviders);
+                FormScriptingHelper.hideSection(tabServiceProviders, sectionInsuranceProviders);
+                FormScriptingHelper.hideSection(tabServiceProviders, sectionActuaryProviders);
+                FormScriptingHelper.hideTab(tabNonQualified);
+                FormScriptingHelper.hideSection(tabPlanSponsorData, sectionNQSponsorData);
+                FormScriptingHelper.showSection(tabPlanSponsorData, sectionPlanSponsorData2);
+                FormScriptingHelper.showSection(tabPlanSponsorData, sectionPlanSponsorData3);
+                FormScriptingHelper.hideSection(tabFeeSchedule, sectionNQFeeSchedule);
+                FormScriptingHelper.hideSection(tabFeeSchedule, sectionSourceOfRevenue);
+                FormScriptingHelper.makeFieldOptional(ct_planFields.ct_financetype);
+                if (IsOnLoad != true) {
+                    FormScriptingHelper.setOptionSetValue(ct_planFields.ct_financetype, null);
+                }
+                FormScriptingHelper.disableField(ct_planFields.ct_financetype);
+                FormScriptingHelper.showField(ct_planFields.ct_qdia_option);
+                FormScriptingHelper.showField(ct_planFields.ct_captrustqdia);
+                FormScriptingHelper.hideField(ct_planFields.ct_liabilitydate);
+                FormScriptingHelper.hideField(ct_planFields.ct_liabilityvalue);
+                FormScriptingHelper.hideField(ct_planFields.ct_rebalancingtolerancelimit);
+            } // DB
+            else if (plantypedesc == "AL") { // EndowmentFoundation) {
+                FormScriptingHelper.showSection(tabServiceProviders, sectionActuaryProviders);
+                FormScriptingHelper.hideSection(tabServiceProviders, sectionTpaProviders);
+                FormScriptingHelper.hideSection(tabServiceProviders, sectionInsuranceProviders);
+                FormScriptingHelper.hideTab(tabNonQualified);
+                FormScriptingHelper.hideSection(tabPlanSponsorData, sectionNQSponsorData);
+                FormScriptingHelper.showSection(tabPlanSponsorData, sectionPlanSponsorData2);
+                FormScriptingHelper.showSection(tabPlanSponsorData, sectionPlanSponsorData3);
+                FormScriptingHelper.hideSection(tabFeeSchedule, sectionNQFeeSchedule);
+                FormScriptingHelper.hideSection(tabFeeSchedule, sectionSourceOfRevenue);
+                FormScriptingHelper.makeFieldOptional(ct_planFields.ct_financetype);
+                if (IsOnLoad != true) {
+                    FormScriptingHelper.setOptionSetValue(ct_planFields.ct_financetype, null);
+                }
+                FormScriptingHelper.disableField(ct_planFields.ct_financetype);
+                FormScriptingHelper.showField(ct_planFields.ct_qdia_option);
+                FormScriptingHelper.showField(ct_planFields.ct_captrustqdia);
+                FormScriptingHelper.showField(ct_planFields.ct_liabilitydate);
+                FormScriptingHelper.showField(ct_planFields.ct_liabilityvalue);
+                FormScriptingHelper.hideField(ct_planFields.ct_rebalancingtolerancelimit);
+                if (planType.value == ct_planOptions.ct_plantype._409A_DB) {
+                    FormScriptingHelper.enableField(ct_planFields.ct_financetype);
+                }
+            } // NQ
+            else if (plantypedesc == "NQ") {
+                FormScriptingHelper.showSection(tabServiceProviders, sectionInsuranceProviders);
+                FormScriptingHelper.hideSection(tabServiceProviders, sectionTpaProviders);
+                FormScriptingHelper.hideSection(tabServiceProviders, sectionActuaryProviders);
+                FormScriptingHelper.showTab(tabNonQualified);
+                FormScriptingHelper.showSection(tabPlanSponsorData, sectionNQSponsorData);
+                FormScriptingHelper.hideSection(tabPlanSponsorData, sectionPlanSponsorData2);
+                FormScriptingHelper.hideSection(tabPlanSponsorData, sectionPlanSponsorData3);
+                FormScriptingHelper.showSection(tabFeeSchedule, sectionNQFeeSchedule);
+                FormScriptingHelper.showSection(tabFeeSchedule, sectionSourceOfRevenue);
+                FormScriptingHelper.showField("ct_modeltypeid");
+                FormScriptingHelper.showField("ct_captrustmodels");
+                FormScriptingHelper.showField("ct_modelpurchaseoneclick");
+                if (FormScriptingHelper.getFormType() == 1 /* XrmEnum.FormType.Create */)
+                    FormScriptingHelper.setOptionSetValue(ct_planFields.ct_erisa, ct_planOptions.ct_erisa.Non_Qualified);
+                FormScriptingHelper.makeFieldRequired(ct_planFields.ct_financetype);
+                FormScriptingHelper.enableField(ct_planFields.ct_financetype);
+                FormScriptingHelper.hideField(ct_planFields.ct_qdia_option);
+                FormScriptingHelper.hideField(ct_planFields.ct_captrustqdia);
+                FormScriptingHelper.hideField(ct_planFields.ct_liabilitydate);
+                FormScriptingHelper.hideField(ct_planFields.ct_liabilityvalue);
+                FormScriptingHelper.showField(ct_planFields.ct_rebalancingtolerancelimit);
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onPlanTypeChange");
+            }
+        }
+    }
+
+    export function CreateRequest(requestString, email) {
+        try {
+
+            var serverUrl = QueryHelper.getSystemParameter("Run QRG").ct_value;
+
+            $.ajax({
+                async: false,
+                type: "POST",
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                data: requestString,
+                url: serverUrl + "/CreateRequest",
+                beforeSend: function (XMLHttpRequest) {
+                    //ensures the results will be returned as JSON.
+                    XMLHttpRequest.setRequestHeader("Accept", "application/json");
+                },
+                success: function (data) {
+                    alert("Your report (ID: " + data + ") is being generated. You should receive an email at " + email + " when completed.");
+                },
+                error: function (XmlHttpRequest, textStatus, errorThrown) {
+                    alert("ERROR: CreateRequest() Check your browsers javascript console for more details." + " \n XmlHttpRequest: " + XmlHttpRequest + " \n textStatus: " + textStatus + " \n errorThrown: " + errorThrown);
+                }
+            });
+        } catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "CreateRequest");
+            }
+        }
+    }//CreateRequest
+    export function GetCurrentUserEmail(enddate) {
+        try {
+            var planIdString = FormScriptingHelper.getEntityId();
+
+            var internalEmailAddress = UserHelper.getEmailAddress(FormScriptingHelper.getUserId());
+            if (internalEmailAddress != null) {
+                var requestString;
+
+                requestString = "{\"ReportId\": 1";
+                requestString += ",\"MasterTemplateId\": 20";
+
+                requestString += ",\"ReportParameters\":[{\"Key\":\"planId\",\"Value\":\"" + planIdString + "\"},{\"Key\":\"enddate\",\"Value\":\"" + enddate + "\"},{\"Key\":\"combinetargets\",\"Value\":false}]";
+                requestString += ",\"OptionalPageSetIds\":[";
+                requestString += "],\"DeliveryEmailAddresses\":[\"" + internalEmailAddress + "\"]}";
+
+                CreateRequest(requestString, internalEmailAddress);
+            }
+            else { return ""; }
+
+        } catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "GetCurrentUserEmail");
+            }
+        }
+    }//GetCurrentUserEmail
+
+    export function CreateSingleClickRequestString() {
+        try {
+            var results = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "ct_archives?$select=ct_name&$filter=ct_synergy eq true");
+            if (results != null) {
+                var enddate = results.value[0]["ct_name"];
+                GetCurrentUserEmail(enddate);
+            }
+            else { alert("No end date found in archive.") }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "CreateSingleClickRequestString");
+            }
+        }
+    }//CreateSingleClickRequestString
+
+    //function to filter lookup
+    export function FilterAddExistingLookup(selectedEntityTypeName, selectedControl, firstPrimaryItemId, formContext) {
+        try {
+            switch (selectedControl.getRelationship().name) {
+                case "ct_ct_institutionalrequest_ct_plan_IRRLookup":
+                    // Get IRR from firstPrimaryItemId
+                    var IRRId = FormScriptingHelper.removeBrackets(firstPrimaryItemId);
+                    var result = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "ct_institutionalrequests" + "(" + IRRId + ")?$select=_ct_client_value");
+                    if (result != null) {
+                        if (result._ct_client_value != null) {
+                            // IRR has Client
+                            ////https://butenko.pro/2019/10/21/xrm-utility-lookupobjects-episode-3-the-uci-strikes-back/
+                            var options = {
+                                allowMultiSelect: true,
+                                entityTypes: ["ct_plan"],
+                                showNew: false,
+                                customFilterTypes: [""],
+                                customFilters: [encodeURIComponent("<filter type='and'><condition attribute='ct_planleadopptclient' operator='eq' value='3' /><condition attribute = 'statecode' operator= 'eq' value = '0'/></filter>")],
+                                //Common Ui
+                                filters: [{
+                                    filterXml: "<filter type='and'><condition attribute='ct_planleadopptclient' operator='eq' value='3'/><condition attribute = 'statecode' operator= 'eq' value = '0'/></filter>",
+                                    entityLogicalName: "ct_plan"
+                                }]
+                            };
+                            lookupAddExistingRecords("ct_ct_institutionalrequest_ct_plan_IRRLookup", "ct_institutionalrequest", "ct_plan", firstPrimaryItemId, selectedControl, options, formContext);
+                        }
+                        else {
+                            // IRR has Opportunity
+                            ////https://butenko.pro/2019/10/21/xrm-utility-lookupobjects-episode-3-the-uci-strikes-back/
+                            var options = {
+                                allowMultiSelect: true,
+                                entityTypes: ["ct_plan"],
+                                showNew: false,
+                                customFilterTypes: [""],
+                                customFilters: [encodeURIComponent("<filter type='and'><condition attribute='ct_planleadopptclient' operator='eq' value='2' /><condition attribute = 'statecode' operator= 'eq' value = '0'/></filter>")],
+                                //Common Ui
+                                filters: [{
+                                    filterXml: "<filter type='and'><condition attribute='ct_planleadopptclient' operator='eq' value='2'/><condition attribute = 'statecode' operator= 'eq' value = '0'/></filter>",
+                                    entityLogicalName: "ct_plan"
+                                }]
+                            };
+                            lookupAddExistingRecords("ct_ct_institutionalrequest_ct_plan_IRRLookup", "ct_institutionalrequest", "ct_plan", firstPrimaryItemId, selectedControl, options, formContext);
+                        }
+                    }
+                    break;
+                case "ct_opportunity_ct_plan_opportunity":
+                    var options = {
+                        allowMultiSelect: true,
+                        entityTypes: ["ct_plan"],
+                        showNew: false,
+                        customFilterTypes: [""],
+                        customFilters: [encodeURIComponent("<filter type='and'><condition attribute='ct_planleadopptclient' operator='eq' value='2' /><condition attribute = 'statecode' operator= 'eq' value = '0'/></filter>")],
+                        //Common Ui
+                        filters: [{
+                            filterXml: "<filter type='and'><condition attribute='ct_planleadopptclient' operator='eq' value='2'/><condition attribute = 'statecode' operator= 'eq' value = '0'/></filter>",
+                            entityLogicalName: "ct_plan"
+                        }]
+                    };
+                    lookupAddExistingRecords("ct_opportunity_ct_plan_opportunity", "ct_opportunity", "ct_plan", firstPrimaryItemId, selectedControl, options, formContext);
+                case "ct_lead_ct_plan_lead":
+                    var options = {
+                        allowMultiSelect: true,
+                        entityTypes: ["ct_plan"],
+                        showNew: false,
+                        customFilterTypes: [""],
+                        customFilters: [encodeURIComponent("<filter type='and'><condition attribute='ct_planleadopptclient' operator='eq' value='1' /><condition attribute = 'statecode' operator= 'eq' value = '0'/></filter>")],
+                        //Common Ui
+                        filters: [{
+                            filterXml: "<filter type='and'><condition attribute='ct_planleadopptclient' operator='eq' value='1'/><condition attribute = 'statecode' operator= 'eq' value = '0'/></filter>",
+                            entityLogicalName: "ct_plan"
+                        }]
+                    };
+                    lookupAddExistingRecords("ct_lead_ct_plan_lead", "lead", "ct_plan", firstPrimaryItemId, selectedControl, options, formContext);
+                case "ct_account_ct_plan":
+                    var options = {
+                        allowMultiSelect: true,
+                        entityTypes: ["ct_plan"],
+                        showNew: false,
+                        customFilterTypes: [""],
+                        customFilters: [encodeURIComponent("<filter type='and'><condition attribute='ct_planleadopptclient' operator='eq' value='3' /><condition attribute = 'statecode' operator= 'eq' value = '0'/></filter>")],
+                        //Common Ui
+                        filters: [{
+                            filterXml: "<filter type='and'><condition attribute='ct_planleadopptclient' operator='eq' value='3'/><condition attribute = 'statecode' operator= 'eq' value = '0'/></filter>",
+                            entityLogicalName: "ct_plan"
+                        }]
+                    };
+                    lookupAddExistingRecords("ct_account_ct_plan", "ct_account", "ct_plan", firstPrimaryItemId, selectedControl, options, formContext);
+                default:
+                    // Any other contact relationship (N:N or 1:N) - use default behaviour
+                    XrmCore.Commands.AddFromSubGrid.addExistingFromSubGridAssociated(selectedEntityTypeName, selectedControl);
+                    break;
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "FilterAddExistingLookup");
+            }
+        }
+    }
+
+
+
+    // relationshipName = the schema name of the N:N or 1:N relationship
+    // primaryEntity = the 1 in the 1:N or the first entity in the N:N - for N:N this is the entity which was used to create the N:N (may need to trial and error this)
+    // relatedEntity = the N in the 1:N or the secondary entity in the N:N
+    // parentRecordId = the guid of the record this subgrid/related entity is used on
+    // gridControl = the grid control parameter passed from the ribbon context
+    // lookupOptions = options for creating the custom lookup with filters: http://butenko.pro/2017/11/22/microsoft-dynamics-365-v9-0-lookupobjects-closer-look/
+    function lookupAddExistingRecords(relationshipName, primaryEntity, relatedEntity, parentRecordId, gridControl, lookupOptions, formContext) {
+        try {
+            Xrm.Utility.lookupObjects(lookupOptions).then(function (results) {
+                // Get the entitySet name for the primary entity
+                Xrm.Utility.getEntityMetadata(primaryEntity).then(function (primaryEntityData) {
+                    var primaryEntitySetName = primaryEntityData.EntitySetName;
+
+                    // Get the entitySet name for the related entity
+                    Xrm.Utility.getEntityMetadata(relatedEntity).then(function (relatedEntityData) {
+                        var relatedEntitySetName = relatedEntityData.EntitySetName;
+
+                        // Call the associate web api for each result (recursive)
+                        associateAddExistingResults(relationshipName, primaryEntitySetName, relatedEntitySetName, relatedEntity, parentRecordId.replace("{", "").replace("}", ""), gridControl, results, 0, formContext)
+                    });
+                });
+            });
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "lookupAddExistingRecords");
+            }
+        }
+    }
+
+    // Used internally by the above function
+    function associateAddExistingResults(relationshipName, primaryEntitySetName, relatedEntitySetName, relatedEntity, parentRecordId, gridControl, results, index, formContext) {
+        try {
+            if (index >= results.length) {
+                // Refresh the grid once completed
+                formContext.ui.setFormNotification("Associated " + index + " record" + (index > 1 ? "s" : ""), "INFO", "associate");
+                if (gridControl) { gridControl.refresh(); }
+
+                // Clear the final notification after 2 seconds
+                setTimeout(function () {
+                    formContext.ui.clearFormNotification("associate");
+                }, 2000);
+                return;
+            }
+
+            formContext.ui.setFormNotification("Associating record " + (index + 1) + " of " + results.length, "INFO", "associate");
+
+
+            var lookupId = results[index].id.replace("{", "").replace("}", "");
+            var lookupEntity = results[index].entityType || results[index].typename;
+
+            var primaryId = parentRecordId;
+            var relatedId = lookupId;
+            if (lookupEntity.toLowerCase() !== relatedEntity.toLowerCase()) {
+                // If the related entity is different to the lookup entity flip the primary and related id's
+                primaryId = lookupId;
+                relatedId = parentRecordId;
+            }
+
+            var association = { '@odata.id': QueryHelper.getWebApiUrl() + relatedEntitySetName + "(" + relatedId + ")" };
+
+            var req = new XMLHttpRequest();
+            req.open("POST", QueryHelper.getWebApiUrl() + primaryEntitySetName + "(" + primaryId + ")/" + relationshipName + "/$ref", true);
+            req.setRequestHeader("Accept", "application/json");
+            req.setRequestHeader("Content-Type", "application/json; charset=utf-8");
+            req.setRequestHeader("OData-MaxVersion", "4.0");
+            req.setRequestHeader("OData-Version", "4.0");
+            req.onreadystatechange = function () {
+                if (this.readyState === 4) {
+                    req.onreadystatechange = null;
+                    index++;
+                    if (this.status === 204 || this.status === 1223) {
+                        // Success
+                        // Process the next item in the list
+                        associateAddExistingResults(relationshipName, primaryEntitySetName, relatedEntitySetName, relatedEntity, parentRecordId, gridControl, results, index, formContext);
+                    }
+                    else {
+                        // Error
+                        var error = JSON.parse(this.response).error.message;
+                        if (error === "A record with matching key values already exists.") {
+                            // Process the next item in the list
+                            associateAddExistingResults(relationshipName, primaryEntitySetName, relatedEntitySetName, relatedEntity, parentRecordId, gridControl, results, index, formContext);
+                        }
+                        else {
+                            Xrm.Navigation.openAlertDialog(error, null);
+                            formContext.ui.clearFormNotification("associate");
+                            if (gridControl) { gridControl.refresh(); }
+                        }
+                    }
+                }
+            };
+            req.send(JSON.stringify(association));
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "associateAddExistingResults");
+            }
+        }
+    }
+
+
+}
