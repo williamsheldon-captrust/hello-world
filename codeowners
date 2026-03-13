@@ -4,8 +4,8 @@
 # file/directory         user
 #
 #
-#  all js files to be reviewed by nicolecollins-captrust
-*.js                nicolecollins-captrust
+#  all js files to be reviewed by @nicolecollins-captrust
+*.js                @nicolecollins-captrust
 
 # all changes to the tooling folder to be reviewed by @crock
 tooling/           @crock
