@@ -5,7 +5,7 @@
 #
 #
 #  all js files to be reviewed by william.sheldon#@captrust.com
-*.js                 @rhill
+*.js                 william.sheldon#@captrust.com
 
 # all changes to the tooling folder to be reviewed by @crock
 tooling/           @crock
