@@ -4,7 +4,7 @@
 # file/directory         user
 #
 #
-#  all js files to be reviewed by @rhill
+#  all js files to be reviewed by william.sheldon#@captrust.com
 *.js                 @rhill
 
 # all changes to the tooling folder to be reviewed by @crock
