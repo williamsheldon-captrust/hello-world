@@ -1,0 +1,15 @@
+# 
+# pattern:
+#
+# file/directory         user
+#
+#
+#  all js files to be reviewed by @rhill
+*.js                 @rhill
+
+# all changes to the tooling folder to be reviewed by @crock
+tooling/           @crock
+
+# all documentation files in the components folder to be reviewed by @jsmith
+components/*.md     @jsmith
+
