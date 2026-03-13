@@ -1,0 +1,1766 @@
+/// <reference path="../common/QueryHelper.ts" />
+/// <reference path="../common/FormScriptingHelper.ts" />
+/// <reference path="../common/loghelper.ts" />
+/// <reference path="../common/UserHelper.ts" />
+//*****************************************************************************
+// Filename:    ct_AccountForm.js
+// Purpose:     This file contains the form script for the Account entity (ct_Account)
+//      
+//*****************************************************************************
+module ct_AccountForm {
+    var CONTRACT_OPTIONS = null;
+    var PRODUCT_OPTIONS = null;
+    //ct_investmentid lookup view id's
+    var DEFAULT_INVESTMENTS = '{1D225455-2E62-4544-B155-CAB85130D13F}';
+    var INSURANCEPRODUCT_INVESTMENTS = '{2E8D9527-1D86-E011-A973-000C293BBA7D}';
+    var PLAN529_INVESTMENTS = '{2E139AC5-1E86-E011-A973-000C293BBA7D}';
+    var VARIABLEANNUITY_INVESTMENTS = '{1E6F90D2-1D86-E011-A973-000C293BBA7D}';
+    var LIMITEDPARTNERSHIP_INVESTMENTS = '{B67D47E3-1E86-E011-A973-000C293BBA7D}';
+    var SMA_INVESTMENTS = '{4E9FCFFB-1E86-E011-A973-000C293BBA7D}';
+    var MODELGUID = '{8EF1402C-51B9-E111-8D0A-00505688000F}';
+    //systemuser lookup view id
+    var FINANCIALADVISORS_USER = '{AE42B5A7-8696-E011-A336-02BF0A0104A0}';
+    //form types
+    var FORM_TYPE_QUICK_CREATE = 5;
+
+    let previousStageId = null;
+    let previousStageName = null;
+
+
+    //Form Load Event Handler
+    export function onLoad(executionContext: Xrm.Events.EventContext) {
+        try {          
+
+            if (FormScriptingHelper.getFieldValue(ct_accountFields.ct_custodian) != null && FormScriptingHelper.getactivestagename() == "Custodian Selection") {
+                FormScriptingHelper.MoveNextStage();
+            }
+
+            FormScriptingHelper.setFormContext(executionContext.getFormContext());
+            showCustodianAlerts(executionContext);
+            toggleRMDOptionset();
+            if (FormScriptingHelper.getFormContext().ui.navigation.items.get("nav_ct_account_ct_solutionsrequest") != null) {
+                FormScriptingHelper.getFormContext().ui.navigation.items.get("nav_ct_account_ct_solutionsrequest").setVisible(false);
+            }
+            FormScriptingHelper.disablebpfField("header_process_ct_feescheduleadded");
+            FormScriptingHelper.disablebpfField("header_process_ct_feescheduleadded_2");
+            FormScriptingHelper.disablebpfField("header_process_ct_feescheduleadded_3");
+            FormScriptingHelper.disablebpfField("header_process_ct_feescheduleadded_4");
+            FormScriptingHelper.disablebpfField("header_process_ct_feescheduleadded_5");
+            FormScriptingHelper.disablebpfField("header_process_ct_feescheduleadded_1");
+
+
+            preserveOptionSets();
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_rmdoverrideeligibility, toggleRMDOptionset);
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_aggregatebilling, prefillAggregateType);
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_cashreserveexpiration, OncashreserveexpirationChange);
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_custodian, onCustodianChange);
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_contract, onContractChange);
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_product, onProductChange);
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_islp, onPositionChange);
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_householdid, OnClientChange);
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_modelid, OnModelChange);
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_closurenotificationdate, onPopulateClosureNotification);
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_finalinvoicerebate, onFinalInvoiceRebate);
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_deliverymethod, ondeliverymethod);
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_trustaccountid, onTrustAccountChange);
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_contracttype, onct_contracttypeChange);
+
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_rmddatesatisfied, onRMDFieldsChange);
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_rmdwithdrawals, onRMDFieldsChange);
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_rmdrequirement, onRMDFieldsChange);
+
+
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_rb, onct_rbChange);
+
+            // FormScriptingHelper.addOnStatusChange(onStatusChange);
+
+            // remove previous event handler and add new one to prevent handler from being call twice
+            const process = FormScriptingHelper.getFormContext().data.process;
+            process.removeOnPreStageChange(toggleStage);
+            process.removeOnStageChange(HandleBPFStageChange);
+            FormScriptingHelper.addOnPreStageChange(toggleStage);
+            FormScriptingHelper.addOnStageChange(HandleBPFStageChange);
+
+
+            FormScriptingHelper.disableField(ct_accountFields.ct_legacydiscretionaryinception); // initially disabled until composite eligibility is populated
+            if (FormScriptingHelper.getDateValue(ct_accountFields.ct_discretionarycompositeeligibilitydate) != null) {
+                FormScriptingHelper.enableField(ct_accountFields.ct_legacydiscretionaryinception);
+            }
+
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_discretionarycompositeeligibilitydate, onDiscretionaryDateChange);
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_discretionaryenddate, onDiscretionaryDateChange);
+            FormScriptingHelper.addOnChange(ct_accountFields.ct_legacydiscretionaryinception, onCompositeDiscretionaryInceptionChange);
+
+            FormScriptingHelper.makeFieldRequired(ct_accountFields.ct_modelid);
+
+            if (FormScriptingHelper.getFieldValue(ct_accountFields.ct_cashreserveexpiration) == true) {
+                FormScriptingHelper.makeFieldRequired(ct_accountFields.ct_cashreserveexpirationdate);
+            }
+            else {
+                FormScriptingHelper.makeFieldOptional(ct_accountFields.ct_cashreserveexpirationdate);
+            }
+
+
+            //if this is a create Account form, remove Advisor and set lookup view to Financial Advisors only - Test2
+            if ((FormScriptingHelper.getFormType() == XrmEnum.FormType.Create) || (FormScriptingHelper.getFormType() == FORM_TYPE_QUICK_CREATE)) {
+                //FormScriptingHelper.setLookupValue(ct_accountFields.ownerid, "systemuser", "", ""); //Commented out as this is set by relationship mappings
+                FormScriptingHelper.setDefaultViewForLookupById(ct_accountFields.ownerid, FINANCIALADVISORS_USER);
+
+                FormScriptingHelper.setDefaultViewForLookupById(ct_accountFields.ownerid, FINANCIALADVISORS_USER);
+                if (FormScriptingHelper.getLookupValue(ct_accountFields.ct_householdid) != null) {
+                    FormScriptingHelper.clearLookupField("ct_pashousehold");
+                }
+
+                modelRules();
+                accountRegistRules();
+            }
+
+            OnClientChange();
+            contractRules();
+            heldAwayRules();
+            productRules();
+            lpPositionRules();
+            investmentRules();
+            insuranceSectionRules();
+            onFinalInvoiceRebate();
+            onPopulateClosureNotification();
+            showSchwabAcctRestrictions();
+            showTradingRequestsTab();
+            onTrustAccountChange();
+
+            if (FormScriptingHelper.getFieldValue(ct_accountFields.statecode) == 0) {
+                OnModelChange();
+            }
+
+            if ((FormScriptingHelper.getFormType() == XrmEnum.FormType.Create)) {
+                FormScriptingHelper.setFocus(ct_accountFields.ct_name);
+
+                // Hiding Zoe specific options unless Apex is selected as the custodian
+                FormScriptingHelper.resetOptionSetList(ct_accountFields.ct_contracttype);
+                FormScriptingHelper.resetOptionSetList(ct_accountFields.ct_reportingtype);
+                FormScriptingHelper.removeOptionSetOptionByValue(ct_accountFields.ct_contracttype, ct_accountOptions.ct_contracttype.IAAZoe);
+                FormScriptingHelper.removeOptionSetOptionByValue(ct_accountFields.ct_reportingtype, ct_accountOptions.ct_reportingtype.ZoeWealthPlatform);
+            }
+
+            FormScriptingHelper.makeFieldRequired("ct_reporttype");
+
+            FormScriptingHelper.clearOptionSet(ct_accountFields.ct_custodian);
+            FormScriptingHelper.addOptionSetOption(ct_accountFields.ct_custodian, { value: 2, text: "Fidelity" })
+            FormScriptingHelper.addOptionSetOption(ct_accountFields.ct_custodian, { value: 3, text: "Schwab" });
+            FormScriptingHelper.addOptionSetOption(ct_accountFields.ct_custodian, { value: 4, text: "NATC" });
+            FormScriptingHelper.addOptionSetOption(ct_accountFields.ct_custodian, { value: 5, text: "Held Away" });
+            FormScriptingHelper.addOptionSetOption(ct_accountFields.ct_custodian, { value: 6, text: "Pershing" });
+            FormScriptingHelper.addOptionSetOption(ct_accountFields.ct_custodian, { value: 8, text: "APEX" })
+
+
+            SetBIFrame(executionContext);
+            getSeismicTeamDetails(executionContext);
+
+                            
+            if ((FormScriptingHelper.getFormType() == XrmEnum.FormType.Create) || (FormScriptingHelper.getFormType() == FORM_TYPE_QUICK_CREATE)) {
+                FormScriptingHelper.removeOptionSetOptionByValue("ct_deliverymethod", 206450000);  // "AEX E-Sign"
+            } else
+            {
+                if (FormScriptingHelper.getOptionSetValue("ct_deliverymethod") != ct_accountOptions.ct_deliverymethod.AEXE_Sign)
+                {
+                    FormScriptingHelper.removeOptionSetOptionByValue("ct_deliverymethod", 206450000);  // "AEX E-Sign"
+                }
+            }
+
+            onct_rbChange();
+
+            if (FormScriptingHelper.getFormType() == XrmEnum.FormType.Create ||
+                FormScriptingHelper.getFieldValue(ct_accountFields.statecode) == 0) // 0 = Active   
+            {
+                //FormScriptingHelper.removeOptionSetOptionByValue(ct_accountFields.ct_reportingtype, ct_accountOptions.ct_reportingtype.BlackDiamond);
+                FormScriptingHelper.removeOptionSetOptionByValue(ct_accountFields.ct_reportingtype, ct_accountOptions.ct_reportingtype.Performer);
+            }
+
+
+
+
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onLoad");
+            }
+        }
+    }
+
+
+
+    export function onRMDFieldsChange() {
+        try {
+            debugger;
+            let ytdDistribution = FormScriptingHelper.getFieldValue(ct_accountFields.ct_rmdwithdrawals);
+            let rmdRequirement = FormScriptingHelper.getFieldValue(ct_accountFields.ct_rmdrequirement);
+            let rmdDateSatisfied = FormScriptingHelper.getDateValue(ct_accountFields.ct_rmddatesatisfied);
+
+            // Only validate if RMD Date Satisfied is populated
+            if (rmdDateSatisfied != null) {
+                // Check if YTD Distribution is less than RMD Requirement
+                if (ytdDistribution != null && rmdRequirement != null && ytdDistribution < rmdRequirement) {
+                    // Clear the RMD Date Satisfied field
+                    FormScriptingHelper.setDateField(ct_accountFields.ct_rmddatesatisfied, null);
+
+                    // Show notification
+                    FormScriptingHelper.setFormNotification("ERROR", "RMD was not satisfied and the field will be cleared. Double check that the requirement was met by reviewing RMD Requirement and YTD Distribution fields.", "rmdvalidation");
+                } else {
+                    // Clear the notification if validation passes
+                    FormScriptingHelper.clearFormNotification("rmdvalidation");
+                }
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onRMDFieldsChange");
+            }
+        }
+    }
+
+
+    export function getSeismicTeamDetails(executionContext) {
+        try {
+            var InSeismicTeam = false;
+            var SeismicTeamId = "";
+            var GUID = FormScriptingHelper.getEntityId();
+            var userID = FormScriptingHelper.getUserId();
+            userID = FormScriptingHelper.removeBrackets(userID);
+            //GET "SEISMIC TEAM" CT_SYSTEMPARAMETER RECORD
+            const SEISMIC_TeamId = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() +
+                "ct_systemparameters" +
+                "?$select=ct_name, ct_value&$filter=ct_systemparameterid eq " +
+                "3F81DCA4-5275-EC11-8943-00224827C671");
+            if (SEISMIC_TeamId != null) {
+                for (var ii = 0; ii < SEISMIC_TeamId.value.length; ii++) {
+                    SeismicTeamId = SEISMIC_TeamId.value[ii]["ct_value"];
+                }
+            }
+
+            const SeismicResult = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "teams?fetchXml=%3Cfetch%20version%3D%221.0%22%20output-format%3D%22xml-platform%22%20mapping%3D%22logical%22%20distinct%3D%22true%22%3E%3Centity%20name%3D%22team%22%3E%3Cattribute%20name%3D%22name%22%20%2F%3E%3Cattribute%20name%3D%22businessunitid%22%20%2F%3E%3Cattribute%20name%3D%22teamid%22%20%2F%3E%3Cattribute%20name%3D%22teamtype%22%20%2F%3E%3Corder%20attribute%3D%22name%22%20descending%3D%22false%22%20%2F%3E%3Cfilter%20type%3D%22and%22%3E%3Ccondition%20attribute%3D%22ct_teamdescription%22%20operator%3D%22eq%22%20value%3D%223%22%20%2F%3E%3C%2Ffilter%3E%3Clink-entity%20name%3D%22teammembership%22%20from%3D%22teamid%22%20to%3D%22teamid%22%20visible%3D%22false%22%20intersect%3D%22true%22%3E%3Clink-entity%20name%3D%22systemuser%22%20from%3D%22systemuserid%22%20to%3D%22systemuserid%22%20alias%3D%22ab%22%3E%3Cfilter%20type%3D%22and%22%3E%3Ccondition%20attribute%3D%22systemuserid%22%20operator%3D%22eq%22%20uitype%3D%22systemuser%22%20value%3D%22%7B" + userID + "%7D%22%20%2F%3E%3C%2Ffilter%3E%3C%2Flink-entity%3E%3C%2Flink-entity%3E%3C%2Fentity%3E%3C%2Ffetch%3E");
+            if (SeismicResult) {
+                for (var ii = 0; ii < SeismicResult.value.length; ii++) {
+                    const seismicRoleId = SeismicResult.value[ii].teamid;
+                    if (seismicRoleId.toLowerCase() === SeismicTeamId.toLowerCase()) {
+                        InSeismicTeam = true;
+                        break;
+                    }
+                }
+            }
+            FormScriptingHelper.hideTab("Seismic");
+            if (InSeismicTeam) {
+                FormScriptingHelper.showTab("Seismic");
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "getSeismicTeamDetails");
+            }
+            return true;
+        }
+    }
+
+
+
+    
+    function onct_rbChange()
+    {
+
+        let baTeam = FormScriptingHelper.CheckUserinTeamwithteamid("66c61e7c-4cff-e611-8104-fc15b4286c00");  // SECURITY TEAM Business Analyst (BA)
+        let financeTeam = FormScriptingHelper.CheckUserinTeamwithteamid("f0a77772-4eff-e611-8104-fc15b4286c00");  // SECURITY TEAM Finance
+        let wealthOpsTeam = FormScriptingHelper.CheckUserinTeamwithteamid("f33e7620-4dff-e611-8104-fc15b4286c00");  // SECURITY TEAM Wealth Operations
+
+        var rb = FormScriptingHelper.getOptionSetValue(ct_accountFields.ct_rb);
+
+        switch (rb) {
+            case ct_accountOptions.ct_rb.R_Wealth_Redeemed:             //
+                FormScriptingHelper.enableField(ct_accountFields.ct_raccountid);               
+                FormScriptingHelper.makeFieldRequired(ct_accountFields.ct_raccountid);
+                break;
+            case ct_accountOptions.ct_rb.B_Wealth_MailedtoClient:       // 2
+                FormScriptingHelper.enableField(ct_accountFields.ct_raccountid);
+                FormScriptingHelper.makeFieldOptional(ct_accountFields.ct_raccountid);
+                break;     
+            default:
+                FormScriptingHelper.disableField(ct_accountFields.ct_raccountid);
+                FormScriptingHelper.makeFieldOptional(ct_accountFields.ct_raccountid);
+                if (baTeam || financeTeam || wealthOpsTeam)
+                {
+                    FormScriptingHelper.clearLookupField(ct_accountFields.ct_raccountid);
+                } 
+                break;
+        }
+    }
+
+
+    
+    export function onct_contracttypeChange()
+    {
+        try {
+            // Get the selected value for ct_contracttype
+            var contractTypeValue = FormScriptingHelper.getOptionSetValue(ct_accountFields.ct_contracttype);
+
+            // Assuming ct_accountOptions.ct_contracttype.CFS and ct_accountOptions.ct_investmentadvisorsservicetype.CFS exist
+            if (contractTypeValue === ct_accountOptions.ct_contracttype.CFS) {
+                FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_investmentadvisorsservicetype, ct_accountOptions.ct_investmentadvisorsservicetype.CFS);
+            }
+        } catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onct_contracttypeChange");
+            }
+        } 
+    }
+
+
+
+    function onTrustAccountChange() {
+        let trust = FormScriptingHelper.getLookupValue(ct_accountFields.ct_trustaccountid);
+        if (trust != null) {
+            FormScriptingHelper.showSection("AccountInfo", "Trust");
+        }
+        else {
+            FormScriptingHelper.hideSection("AccountInfo", "Trust");
+        }
+    }
+
+    export function SetBIFrame(executionContext) {
+        try {
+            var formContext = executionContext.getFormContext();
+            var pbiFrame = formContext.getControl("IFRAME_AccountDataHealth");
+            if (FormScriptingHelper.getEntityId() !== null) {
+                var GUID = FormScriptingHelper.getEntityId();
+                //replace the Power BI url with the url from the Embed step
+                var PBIurl = QueryHelper.getParameterValue("47A53DC2-9CF9-ED11-8849-0022482A4580").ct_value; //System Parameter Guid For Data Health Embedded Report
+                //accounts = account table in BI, and accountid=guid for account
+                pbiFrame.setSrc(PBIurl + "&filter=AccountData/ct_accountid eq '" + GUID + "'");
+            }
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "SetBIFrame");
+            }
+        }
+    }
+
+    export function formatFidelityCharitable(f) {
+        var r = /[^0-9]/g;
+        var str = f.replace(r, '');
+        str = str.substr(0, 7);
+        return str;
+    }
+    export function formatFidelityDashes(f) {
+        var r = /[\W_]+/g,
+            npa = '',
+            nxx = '';
+        var str = f.replace(r, '');
+        npa = str.substr(0, 3);
+        nxx = str.substr(3, 6);
+        str = npa + '-' + nxx;
+        return str.toUpperCase();
+    }
+    export function formatPershing(f) {
+        var r = /[\W_]+/g,
+            npa = '';
+        var str = f.replace(r, '');
+        npa = str.substr(0, 9);
+        str = npa;
+        return str.toUpperCase();
+    }
+    export function formatSchwabDashes(f) {
+        var r = /[^0-9]/g,
+            npa = '',
+            nxx = '';
+        var str = f.replace(r, '');
+        npa = str.substr(0, 4);
+        nxx = str.substr(4, 4);
+        return str = npa + '-' + nxx;
+    }
+    export function formatTDAmeritrade(f) {
+        var r = /[^0-9]/g,
+            npa = '';
+        var str = f.replace(r, '');
+        npa = str.substr(0, 9);
+        return str = npa;
+    }
+
+    // either of the discreationary date fields onChange Event Handler
+    export function onDiscretionaryDateChange() {
+        try {
+            let dtEligibility = FormScriptingHelper.getDateValue(ct_accountFields.ct_discretionarycompositeeligibilitydate);
+            let dtDiscretionaryEnd = FormScriptingHelper.getDateValue(ct_accountFields.ct_discretionaryenddate);
+            let dtInception = FormScriptingHelper.getDateValue(ct_accountFields.ct_legacydiscretionaryinception);
+            if ((dtEligibility != null && dtDiscretionaryEnd != null) && dtEligibility >= dtDiscretionaryEnd) {
+                FormScriptingHelper.openAlertDialog({
+                    text: "Discretionary Composite Eligibility Date must be before Discretionary End Date."
+                });
+                FormScriptingHelper.setFocus(ct_accountFields.ct_discretionaryenddate);
+            }
+            if (dtEligibility == null && dtInception != null) {
+                FormScriptingHelper.openAlertDialog({
+                    text: "Update the Discretionary Composite Eligibility Date or clear Legacy Discretionary Inception Date."
+                });
+                FormScriptingHelper.setFocus(ct_accountFields.ct_legacydiscretionaryinception);
+                return;
+            }
+            if (dtEligibility != null) {
+                FormScriptingHelper.makeFieldRequired(ct_accountFields.ct_esg);
+                FormScriptingHelper.makeFieldRequired(ct_accountFields.ct_clientrestrictions);
+                FormScriptingHelper.enableField(ct_accountFields.ct_legacydiscretionaryinception);
+            } else {
+                FormScriptingHelper.disableField(ct_accountFields.ct_legacydiscretionaryinception);
+                FormScriptingHelper.makeFieldOptional(ct_accountFields.ct_esg);
+                FormScriptingHelper.makeFieldOptional(ct_accountFields.ct_clientrestrictions);
+            }
+        } catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onDiscretionaryDateChange");
+            }
+        }
+    }
+
+    function refreshForm() {
+        var entityFormOptions = {};
+        entityFormOptions["entityName"] = FormScriptingHelper.getFormContext().data.entity.getEntityName();
+        entityFormOptions["openInNewWindow"] = false;
+        entityFormOptions["entityId"] = FormScriptingHelper.getFormContext().data.entity.getId();
+
+        Xrm.Navigation.openForm(entityFormOptions, null);
+
+    }
+
+    export enum stateid {
+        Performance_ReportingPath1 = "9f964704-c291-4f33-83c0-0c98c46c2ebc",
+        Performance_ReportingPath2 = "af2b3a0d-0be3-4dca-a492-765837ee5180",
+    }
+
+    export function toggleStage(e) {
+        try {
+            let ct_accountid = FormScriptingHelper.getEntityId();
+            let EventArgs = e.getEventArgs();
+            let path = EventArgs.getDirection();
+            let StageId = FormScriptingHelper.getactivestageid(); let StageName = FormScriptingHelper.getactivestagename();
+
+            previousStageId = FormScriptingHelper.getactivestageid();
+            previousStageName = FormScriptingHelper.getactivestagename();
+
+            if (StageName == "Billing") {
+                if (FormScriptingHelper.getFieldValue(ct_accountFields.ct_feescheduleadded) != ct_accountOptions.ct_feescheduleadded.Y) {
+                    EventArgs.preventDefault();
+                }
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "ToggleForm");
+            }
+        }
+    }
+
+    export function HandleBPFStageChange(e) {
+        try {
+            let ct_accountid = FormScriptingHelper.getEntityId();
+            let EventArgs = e.getEventArgs();
+            let path = EventArgs.getDirection();
+            let StageId = FormScriptingHelper.getactivestageid(); 
+            let StageName = FormScriptingHelper.getactivestagename();
+
+            if (previousStageName == "Custodian Account Setup" && StageName == "Billing") {
+                var custodianValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_custodian);
+                
+                if (custodianValue == ct_accountOptions.ct_custodian.APEX) {
+                    // start full billing automation for Zoe
+                    var azureIntegrationsBaseURL = QueryHelper.getParameterValue("6f4fb73b-47f8-ef11-be20-000d3a8b2c12").ct_value;
+                    var zoeStorageAccount = QueryHelper.getParameterValue("41c2753c-fdf9-ef11-be20-7c1e5258feba").ct_value;
+                    var requestURL = azureIntegrationsBaseURL + "AddMessageToQueue";
+                    var clientId = FormScriptingHelper.getLookupValue(ct_accountFields.ct_householdid);
+                    var openDate = FormScriptingHelper.getDateValue(ct_accountFields.ct_dateopen);
+
+                    var data = {
+                        "StorageAccountName": zoeStorageAccount,
+                        "QueueName": "zoemessages",
+                        "MessageContent":{
+                            "event_type": "CAPCONNECT_billing_automation",
+                            "ct_accountid": ct_accountid,
+                            "clientId": clientId.id,
+                            "openDate": openDate
+                        }
+                    }
+
+                    QueryHelper.webApiPost(requestURL, data)
+                }
+            }
+
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "HandleBPFStageChange");
+            }
+        }
+    }
+
+    export function onStatusChange() {
+        try {
+            XrmCore.Commands.Deactivate.deactivatePrimaryRecord(FormScriptingHelper.getEntityId(), "ct_account");
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onStatusChange");
+            }
+        }
+    }
+
+    export function ButtonDeactivate(FirstPrimaryItemId, PrimaryEntityTypeName) {
+        try {
+            XrmCore.Commands.Deactivate.deactivatePrimaryRecord(FormScriptingHelper.getEntityId(), "ct_account");
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "ButtonDeactivate");
+            }
+        }
+    }
+
+
+
+
+    //Show or Hide RAP info cards based on if lead consultant is in Minnetonka Office
+    function HasAccountHoldings(accountid) {
+
+        let uri = `
+              <fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false" >
+                <entity name="ct_holding" >
+                <attribute name="ct_accountid" />
+                <attribute name="ct_name" />
+                <filter type="and" >
+                    <condition attribute="ct_accountid" operator="eq" value="${accountid}" />
+                </filter>
+               <filter type="and" >
+                    <condition attribute="statecode" operator="eq" value="${0}" />
+                </filter>
+                </entity>
+            </fetch>
+        `;
+
+        let fetch = encodeURIComponent(uri);
+        var url = QueryHelper.getWebApiUrl() + "ct_holdings?fetchXml=" + fetch;
+        var result: Interface.IWebApiResult = QueryHelper.webApiRequest(url);
+
+        if (result.value.length > 0) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+
+    // ct_legacydiscretionaryinception onChange Event Handler
+    export function onCompositeDiscretionaryInceptionChange() {
+        try {
+            let dtEligibility = FormScriptingHelper.getDateValue(ct_accountFields.ct_discretionarycompositeeligibilitydate);
+            let dtDiscretionaryEnd = FormScriptingHelper.getDateValue(ct_accountFields.ct_discretionaryenddate);
+            let dtInception = FormScriptingHelper.getDateValue(ct_accountFields.ct_legacydiscretionaryinception);
+            if ((dtEligibility != null && dtInception != null) && dtEligibility <= dtInception) {
+                FormScriptingHelper.openAlertDialog({
+                    text: "Discretionary Composite Eligibility Date must exist and be later than Legacy Discretionary Inception."
+                });
+                FormScriptingHelper.setFocus(ct_accountFields.ct_discretionarycompositeeligibilitydate);
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onCompositeDiscretionaryInceptionChange");
+            }
+        }
+    }
+
+    //Client onChange Event Handler
+    export function OnClientChange() {
+        try {
+            var client = FormScriptingHelper.getLookupValue(ct_accountFields.ct_householdid);
+            if (client != null) {
+                var Clientresult = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "accounts(" + client.id + ")?$select=_ownerid_value,ct_clienttype");
+                if (Clientresult != null && Clientresult["ct_clienttype"] != null) {
+                    if (Clientresult["ct_clienttype"] == 0) {//institutional
+                        FormScriptingHelper.makeFieldOptional(ct_accountFields.ct_primaryownerid);
+                    } else {//Individual
+                        FormScriptingHelper.makeFieldRequired(ct_accountFields.ct_primaryownerid);
+                    }
+                }
+            }
+            else {
+                FormScriptingHelper.makeFieldOptional(ct_accountFields.ct_primaryownerid);
+            }
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onCustodianChange");
+            }
+        }
+    }
+
+    export function onSave(executionObj) {
+
+        if (FormScriptingHelper.isDirty(ct_accountFields.ct_finalinvoicerebate) && FormScriptingHelper.getOptionSetValue(ct_accountFields.ct_finalinvoicerebate) == ct_accountOptions.ct_finalinvoicerebate.No) {
+            onsaveFinalInvoiceRebate(executionObj);
+        }
+
+        validateRField(executionObj);
+        wealthAggregationFormAlert(executionObj);
+
+
+
+        // validate target percentage fields total to 100
+        // are any of the three fields populated?
+        var cashequivalentspercentage = FormScriptingHelper.getFieldValue(ct_accountFields.ct_cashequivalentspercentage) == null ? 0 : FormScriptingHelper.getFieldValue(ct_accountFields.ct_cashequivalentspercentage);
+        var fixedincomepercentage = FormScriptingHelper.getFieldValue(ct_accountFields.ct_fixedincomepercentage) == null ? 0 : FormScriptingHelper.getFieldValue(ct_accountFields.ct_fixedincomepercentage);
+        var usequitypercentage = FormScriptingHelper.getFieldValue(ct_accountFields.ct_usequitypercentage) == null ? 0 : FormScriptingHelper.getFieldValue(ct_accountFields.ct_usequitypercentage);
+
+
+        if (FormScriptingHelper.getFieldValue(ct_accountFields.ct_cashequivalentspercentage) != null
+            || FormScriptingHelper.getFieldValue(ct_accountFields.ct_fixedincomepercentage) != null
+            || FormScriptingHelper.getFieldValue(ct_accountFields.ct_usequitypercentage) != null
+        ) {
+            // do the fields not add to 100?
+            var cashequivalentspercentage = FormScriptingHelper.getFieldValue(ct_accountFields.ct_cashequivalentspercentage) == null ? 0 : FormScriptingHelper.getFieldValue(ct_accountFields.ct_cashequivalentspercentage);
+            var fixedincomepercentage = FormScriptingHelper.getFieldValue(ct_accountFields.ct_fixedincomepercentage) == null ? 0 : FormScriptingHelper.getFieldValue(ct_accountFields.ct_fixedincomepercentage);
+            var usequitypercentage = FormScriptingHelper.getFieldValue(ct_accountFields.ct_usequitypercentage) == null ? 0 : FormScriptingHelper.getFieldValue(ct_accountFields.ct_usequitypercentage);
+            var fieldTotal = cashequivalentspercentage + fixedincomepercentage + usequitypercentage;
+            if (fieldTotal != 100) {
+                // display message and cancel the save
+                FormScriptingHelper.openAlertDialog({ text: "Target Asset Allocations must be 100% before you can save the record." });
+                executionObj.getEventArgs().preventDefault();
+                return;
+            }
+
+
+        }
+
+        try {
+            if (FormScriptingHelper.isDirty(ct_accountFields.ct_cashreserve) || FormScriptingHelper.isDirty(ct_accountFields.ct_cashreserveexpirationdate)) {
+                let result = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "ct_tradeflowrequests?$select=createdon,ct_tradeflowrequestid&$filter=statecode eq 0 and  ct_trade ne 6 and  ct_trade ne 7 and  _ct_accountid_value eq " + FormScriptingHelper.getEntityId().toString());
+                if (result != null && result != undefined && result.value.length > 0) {
+                    FormScriptingHelper.openAlertDialog({ text: "There are already pending trades for this account.  Contact the Trade Desk immediately." });
+                }
+                CashReserveTFR();
+                FormScriptingHelper.openConfirmDialog(
+                    {
+                        text: "A Cash Reserve Request has been created. Do you need trades executed for the Cash Reserve Request? \nYes - A TFR is necessary for my Cash Reserve Request.\nNo - No trades are necessary for my Cash Reserve Request.",
+                        subtitle: " ",
+                        confirmButtonLabel: "Yes",
+                        cancelButtonLabel: "No"
+
+                    },
+                    null,
+                    function yesclosecallback(success) {
+                        if (success.confirmed) {
+                            var entity = {};
+                            let Number = FormScriptingHelper.getFieldValue(ct_accountFields.ct_accountnumber);
+                            let Accountname = FormScriptingHelper.removeBrackets(FormScriptingHelper.getEntityId());
+                            let accname = FormScriptingHelper.getFieldValue(ct_accountFields.ct_name);
+                            if (Number != null && Number != undefined) {
+                                entity[ct_tradeflowrequestFields.ct_accountnumber] = Number;
+                            }
+                            if (Accountname != null && Accountname != undefined) {
+                                entity["ct_accountid"] = Accountname;
+                                if (accname != null && accname != undefined) {
+                                    entity["ct_accountidname"] = accname;
+                                }
+                            }
+                            FormScriptingHelper.openForm({
+                                entityName: ct_tradeflowrequestFields.entityname,
+                                openInNewWindow: true
+                            }, entity);
+                        }
+                        else {
+                            //Do Nothing
+                        }
+                    },
+                    null
+                );
+            }
+
+
+        }
+        catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onCustodianChange");
+            }
+        }
+
+        // Composite Tracking tab
+        try {
+            let dtEligibility = FormScriptingHelper.getDateValue(ct_accountFields.ct_discretionarycompositeeligibilitydate);
+            let dtInception = FormScriptingHelper.getDateValue(ct_accountFields.ct_legacydiscretionaryinception);
+            let dtDiscretionaryEnd = FormScriptingHelper.getDateValue(ct_accountFields.ct_discretionaryenddate);
+            if ((dtEligibility != null && dtInception != null) && dtEligibility <= dtInception) {
+                FormScriptingHelper.openAlertDialog({
+                    text: "Legacy Discretionary Inception must be less than Discretionary Composite Eligibility Date."
+                });
+                FormScriptingHelper.setFocus(ct_accountFields.ct_legacydiscretionaryinception);
+                executionObj.getEventArgs().preventDefault();
+                return;
+            }
+            if ((dtEligibility == null && dtInception != null)) {
+                FormScriptingHelper.openAlertDialog({
+                    text: "Discretionary Composite Eligibility Date must be populated if Legacy Discretionary Inception exists."
+                });
+                FormScriptingHelper.setFocus(ct_accountFields.ct_discretionarycompositeeligibilitydate);
+                executionObj.getEventArgs().preventDefault();
+                return;
+            }
+            if ((dtEligibility != null && dtDiscretionaryEnd != null) && dtEligibility >= dtDiscretionaryEnd) {
+                FormScriptingHelper.openAlertDialog({
+                    text: "Discretionary End Date must be greater than Discretionary Composite Eligibility Date."
+                });
+                FormScriptingHelper.setFocus(ct_accountFields.ct_discretionaryenddate);
+                executionObj.getEventArgs().preventDefault();
+                return;
+            }
+        } catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onSave CompositeTracking");
+            }
+
+        }
+
+        // Validate account number format
+        try {
+            // Get the custodian 
+            var custodianValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_custodian);
+            let accountId = FormScriptingHelper.getFieldValue(ct_accountFields.ct_accountnumber);
+            let accountType = FormScriptingHelper.getOptionSetValue(ct_accountFields.ct_accounttype);
+            //set an IF or switch on custodian.  If held away don't move on.  Else clean the field and add dashes or format as necessary.
+            
+            if (custodianValue != ct_accountOptions.ct_custodian.HeldAway && accountId != null) {
+                let formattedAccountId = '';
+                var valid = true;
+                //Strip the field of any non-alphanumeric regardless of how it was input.  
+                switch (custodianValue) {
+                    case ct_accountOptions.ct_custodian.Fidelity:   //Fidelity - xxx-xxxxxx alphanumeric(10)
+                        if (accountType = ct_accountOptions.ct_accounttype.Charitable_DonorAdvisedFund_) {
+                            // For Charitable accounts, 7 digit account number without dashes
+                            formattedAccountId = formatFidelityCharitable(accountId);
+                            if (formattedAccountId.length < 7) {
+                                valid = false;
+                            }
+                            break;
+                        }
+                        else {
+                            formattedAccountId = formatFidelityDashes(accountId);
+                            if (formattedAccountId.length < 10) {
+                                valid = false;
+                            }
+                            break;
+                        }
+                    case ct_accountOptions.ct_custodian.Pershing:   //PAS/Pershing - xxxxxxxx - alphanumeric(9)
+                        formattedAccountId = formatPershing(accountId);
+                        if (formattedAccountId.length < 9) {
+                            valid = false;
+                        }
+                        break;
+                    case ct_accountOptions.ct_custodian.Schwab:     //Schwab - xxxx-xxxx numbers(9)
+                        formattedAccountId = formatSchwabDashes(accountId);
+                        if (formattedAccountId.length < 9) {
+                            valid = false;
+                        }
+                        break;
+                    case ct_accountOptions.ct_custodian.TDAmeritrade://TD Ameritrade - xxxxxxxxx numbers(9)
+                        formattedAccountId = formatTDAmeritrade(accountId);
+                        if (formattedAccountId.length < 9) {
+                            valid = false;
+                        }
+                        break;
+                    case ct_accountOptions.ct_custodian.APEX:       //APEX - xxxxxxxx alphanumeric(8)
+                        // Check if accountId is alphanumeric, exactly 8 characters long, and contains no dashes
+                        if (!/^[a-zA-Z0-9]{8}$/.test(accountId)) {
+                            valid = false;
+                        }
+                        break;
+                    default:
+                        break;
+                }
+                //FormScriptingHelper.setTextboxValue("ct_accountnumber", formattedAccountId);
+                if (!valid) {
+                    FormScriptingHelper.openAlertDialog({ text: "Invalid account number format for Custodian" });
+                    executionObj.getEventArgs().preventDefault();
+                    return;
+                }
+            }
+
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                //display the message  
+                FormScriptingHelper.setFieldNotification("ct_accountnumber", "Invalid account number format for Custodian");
+                LogHelper.logUiException(err, "onAccountChange");
+            }
+        }
+    }
+
+    export function CashReserveTFR() {
+        try {
+            var entity = {};
+            let Number = FormScriptingHelper.getFieldValue(ct_accountFields.ct_accountnumber);
+            let Accountname = FormScriptingHelper.removeBrackets(FormScriptingHelper.getEntityId());
+            let Custodian = FormScriptingHelper.getOptionSetValue(ct_accountFields.ct_custodian);
+            let Repcode = FormScriptingHelper.getLookupValue(ct_accountFields.ct_repcodeid);
+            let Model = FormScriptingHelper.getLookupValue(ct_accountFields.ct_modelid);
+            //tfr number
+            //service team code
+            let Client = FormScriptingHelper.getLookupValue(ct_accountFields.ct_householdid);
+            //TFR Type
+            //CMC(if applicable)
+            // Lead Consultant - CLIENT CARD
+            let Queuedate = new Date().toISOString().slice(0, 10);
+            let trade = ct_tradeflowrequestOptions.ct_trade.CashReserve;//Set to cash reserve
+            let status = ct_tradeflowrequestOptions.Ct_tradeflowrequest_statuscode.New;
+            let Tradingins = FormScriptingHelper.getFieldValue(ct_accountFields.ct_tradinginstructions);
+            let cashreserve = FormScriptingHelper.getFieldValue(ct_accountFields.ct_cashreserve);
+            let cashreserveexp = FormScriptingHelper.getFieldValue(ct_accountFields.ct_cashreserveexpiration);
+            let cashreserveexpdate = FormScriptingHelper.getDateValue(ct_accountFields.ct_cashreserveexpirationdate);
+            let tradedetails = "Cash Reserve" + ": " + FormattingHelper.formatAsDecimal(FormScriptingHelper.getFieldValue(ct_accountFields.ct_cashreserve), 2, ",", "$");
+            let tradeenteredby = FormScriptingHelper.getUserName();
+            //Daysonqueue
+            let tradedate = new Date().toISOString().slice(0, 10);
+            if (Number != null && Number != undefined) {
+                entity[ct_tradeflowrequestFields.ct_accountnumber] = Number;
+            }
+            if (Accountname != null && Accountname != undefined) {
+                entity["ct_accountid@odata.bind"] = "/ct_accounts(" + Accountname + ")";
+            }
+            if (Custodian != null && Custodian != undefined) {
+                entity[ct_tradeflowrequestFields.ct_custodian] = Custodian;
+            }
+            if (Repcode != null && Repcode != undefined) {
+                entity[ct_tradeflowrequestFields.ct_repcode] = Repcode.name;
+            }
+            if (Model != null && Model != undefined) {
+                entity[ct_tradeflowrequestFields.ct_model] = Model.name;
+            }
+            if (Queuedate != null && Queuedate != undefined) {
+                entity[ct_tradeflowrequestFields.ct_queuedate] = Queuedate;
+            }
+            if (trade != null && trade != undefined) {
+                entity[ct_tradeflowrequestFields.ct_trade] = trade;
+            }
+            if (status != null && status != undefined) {
+                entity[ct_tradeflowrequestFields.statuscode] = status;
+            }
+            if (Tradingins != null && Tradingins != undefined) {
+                entity[ct_tradeflowrequestFields.ct_specialinstructions] = Tradingins;
+            }
+            if (cashreserve != null && cashreserve != undefined) {
+                entity[ct_tradeflowrequestFields.ct_cashreserve] = cashreserve;
+            }
+            if (cashreserveexp != null && cashreserveexp != undefined) {
+                entity[ct_tradeflowrequestFields.ct_cashreservexxpiration] = cashreserveexp;
+            }
+            if (cashreserveexpdate != null && cashreserveexpdate != undefined) {
+                entity[ct_tradeflowrequestFields.ct_cashreserveexpirationdate] = cashreserveexpdate;
+            }
+            if (tradedetails != null && tradedetails != undefined) {
+                entity[ct_tradeflowrequestFields.ct_tradedetails] = tradedetails;
+            }
+            if (tradeenteredby != null && tradeenteredby != undefined) {
+                entity[ct_tradeflowrequestFields.ct_tradeenteredby] = tradeenteredby;
+            }
+            if (tradedate != null && tradedate != undefined) {
+                entity[ct_tradeflowrequestFields.ct_tradedate] = tradedate;
+            }
+            entity = Setcmcorteam(Client, entity);
+            entity[ct_tradeflowrequestFields.ct_daysonqueue] = 0;
+            var TFRurl = QueryHelper.getWebApiUrl() + "ct_tradeflowrequests";
+            QueryHelper.webApiPost(TFRurl, entity, null, null, function complete() {
+                alert("failed to create TFR");
+            });
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "NAICS_validateInput");
+            }
+        }
+    }
+
+    export function Setcmcorteam(client, entity) {
+        try {
+            let tradetype;
+            entity["ct_Client@odata.bind"] = "/accounts(" + client.id + ")";
+            var result = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "accounts(" + client.id + ")?$select=_ownerid_value,ct_clienttype");
+            if (result != null && result != undefined) {
+                let advisorid = result["_ownerid_value"];
+                if (result["ct_clienttype"] == 0) {//institutional
+                    tradetype = ct_tradeflowrequestOptions.ct_tradeflowrequesttypecode.Institutional;
+                    var result1 = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "systemusers(" + advisorid + ")?$select=fullname,_ct_institutionalcmcid_value&$expand=ct_institutionalcmcid($select=fullname)");
+                    var result2 = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "systemusers(" + advisorid + ")?$select=fullname,_ct_institutionalserviceteam_value&$expand=ct_institutionalserviceteam($select=name)");
+                }
+                else if (result["ct_clienttype"] == 1) {
+                    //wealth
+                    tradetype = ct_tradeflowrequestOptions.ct_tradeflowrequesttypecode.Wealth;
+                    var result1 = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "systemusers(" + advisorid + ")?$select=fullname,_ct_wealthcmcid_value&$expand=ct_wealthcmcid($select=fullname)");
+                    var result2 = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "systemusers(" + advisorid + ")?$select=fullname,_ct_wealthserviceteam_value&$expand=ct_wealthserviceteam($select=name)");
+                }
+                if (result1 != null && result1 != undefined) {
+                    var cmcid;
+                    if (result1["ct_institutionalcmcid"] != null && result1["ct_institutionalcmcid"] != undefined) {
+                        cmcid = result1["_ct_institutionalcmcid_value"];
+                    }
+                    if (result1["ct_wealthcmcid"] != null && result1["ct_wealthcmcid"] != undefined) {
+                        cmcid = result1["_ct_wealthcmcid_value"];
+                    }
+                    if (cmcid != null) {
+                        entity["ct_cmc@odata.bind"] = "/systemusers(" + cmcid + ")";
+                    }
+                }
+                if (result2 != null && result2 != undefined) {
+                    var serviceteamid;
+                    if (result2["ct_institutionalserviceteam"] != null && result2["ct_institutionalserviceteam"] != undefined) {
+                        serviceteamid = result2["ct_institutionalserviceteam"]["teamid"];
+                    }
+                    if (result2["ct_wealthserviceteam"] != null && result2["ct_wealthserviceteam"] != undefined) {
+                        serviceteamid = result2["ct_wealthserviceteam"]["teamid"];
+                    }
+                    if (serviceteamid != null) {
+                        entity["ct_serviceteam@odata.bind"] = "/teams(" + serviceteamid + ")";
+                    }
+                }
+                entity[ct_tradeflowrequestFields.ct_tradeflowrequesttypecode] = tradetype;
+                return entity;
+            }
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onModelChange");
+            }
+        }
+    }
+
+
+    export function OnModelChange() {
+        try {
+           
+            FormScriptingHelper.enableField(ct_accountFields.ct_investmentid);
+            var ct_modelid = FormScriptingHelper.getLookupValue(ct_accountFields.ct_modelid);
+            if (ct_modelid != null) {
+                var model_results = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "ct_models(" + ct_modelid.id + ")?$select=ct_domain&$expand=ct_Investmentlookup($select=ct_investmentid,ct_investmentname)");
+                if (model_results != null && model_results.ct_Investmentlookup != null) {
+                    FormScriptingHelper.setLookupValue(ct_accountFields.ct_investmentid, "ct_investment", model_results.ct_Investmentlookup.ct_investmentid, model_results.ct_Investmentlookup.ct_investmentname);
+                    FormScriptingHelper.disableField(ct_accountFields.ct_investmentid);
+                }
+
+                if (model_results != null && model_results.ct_domain != null) {
+                    FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_domain, model_results.ct_domain);
+                } else {
+                    FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_domain, null);
+                }
+            } else {
+                FormScriptingHelper.setLookupValue(ct_accountFields.ct_investmentid, "ct_investment", null, null);
+                FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_domain, null);
+            }
+
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onModelChange");
+            }
+        }
+    }
+
+    export function OncashreserveexpirationChange() {
+        "use strict"
+
+        try {
+            if (FormScriptingHelper.getFieldValue(ct_accountFields.ct_cashreserveexpiration) == true) {
+                FormScriptingHelper.makeFieldRequired(ct_accountFields.ct_cashreserveexpirationdate);
+            }
+            else {
+                FormScriptingHelper.makeFieldOptional(ct_accountFields.ct_cashreserveexpirationdate);
+            }
+
+
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "OncashreserveexpirationChange");
+            }
+        }
+    }
+
+
+    //ct_custodian onChange Event Handler
+    export function onCustodianChange() {
+        try {
+            contractRules();
+            heldAwayRules();
+            productRules();
+            accountRegistRules();
+            investmentRules();
+            insuranceSectionRules();
+            modelRules();
+            showSchwabAcctRestrictions();
+            zoeRules();
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onCustodianChange");
+            }
+        }
+    }
+
+    //ct_contract onChange Event Handler
+    export function onContractChange() {
+        try {
+            lpPositionRules();
+            investmentRules();
+            onchangecontract_modelRules();//AK changed code
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onContractChange");
+            }
+        }
+    }
+
+    //ct_product onChange Event Handler
+    export function onProductChange() {
+        try {
+            accountRegistRules();
+            investmentRules();
+            insuranceSectionRules();
+            modelRules();
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onProductChange");
+            }
+        }
+    }
+
+    //ct_islp onchange Event Handler
+    export function onPositionChange() {
+        try {
+            investmentRules();
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onPositionChange");
+            }
+        }
+    }
+
+    // field behaviors for Zoe and Apex custodian selection
+    export function zoeRules() {
+        try {
+            var custodianValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_custodian);
+            if (custodianValue == ct_accountOptions.ct_custodian.APEX) {
+                // clear the contract type field and set the value to IAA Zoe as only option
+                FormScriptingHelper.clearOptionSet(ct_accountFields.ct_contracttype);
+                FormScriptingHelper.addOptionbyValue(ct_accountFields.ct_contracttype, ct_accountOptions.ct_contracttype.IAAZoe, ct_accountOptions.ct_contracttypeMap[ct_accountOptions.ct_contracttype.IAAZoe]);
+                FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_contracttype, ct_accountOptions.ct_contracttype.IAAZoe);
+
+                // clear the reporting type field and set the value to Zoe Wealth Platform as only option
+                FormScriptingHelper.clearOptionSet(ct_accountFields.ct_reportingtype);
+                FormScriptingHelper.addOptionbyValue(ct_accountFields.ct_reportingtype, ct_accountOptions.ct_reportingtype.ZoeWealthPlatform, ct_accountOptions.ct_reportingtypeMap[ct_accountOptions.ct_reportingtype.ZoeWealthPlatform]);
+                FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_reportingtype, ct_accountOptions.ct_reportingtype.ZoeWealthPlatform);
+            } else {
+                // Hiding Zoe specific options unless Apex is selected as the custodian
+                FormScriptingHelper.resetOptionSetList(ct_accountFields.ct_contracttype);
+                FormScriptingHelper.resetOptionSetList(ct_accountFields.ct_reportingtype);
+                FormScriptingHelper.removeOptionSetOptionByValue(ct_accountFields.ct_contracttype, ct_accountOptions.ct_contracttype.IAAZoe);
+                FormScriptingHelper.removeOptionSetOptionByValue(ct_accountFields.ct_reportingtype, ct_accountOptions.ct_reportingtype.ZoeWealthPlatform);
+            }
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "zoeRules");
+            }
+        }
+    }
+
+    //ct_contract field behaviors
+    export function contractRules() {
+        try {
+            var custodianValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_custodian);
+            var currentContractValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_contract);
+            FormScriptingHelper.makeFieldRequired(ct_accountFields.ct_contract);
+            if (custodianValue == ct_accountOptions.ct_custodian.HeldAway) {
+                FormScriptingHelper.addOptionSetOption(ct_accountFields.ct_contract, { text: ct_accountOptions.ct_contractMap[ct_accountOptions.ct_contract.Noneoftheabove], value: ct_accountOptions.ct_contract.Noneoftheabove });
+                FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_contract, ct_accountOptions.ct_contract.Noneoftheabove);
+                FormScriptingHelper.makeFieldRequired(ct_accountFields.ct_contract);
+                FormScriptingHelper.disableField(ct_accountFields.ct_contract);
+            }
+            else if (custodianValue == ct_accountOptions.ct_custodian.Pershing || custodianValue == ct_accountOptions.ct_custodian.Fidelity || custodianValue == ct_accountOptions.ct_custodian.Schwab || custodianValue == ct_accountOptions.ct_custodian.APEX) {
+                FormScriptingHelper.removeOptionSetOptionByValue(ct_accountFields.ct_contract, ct_accountOptions.ct_contract.Noneoftheabove);
+                if (currentContractValue != ct_accountOptions.ct_contract.Noneoftheabove) {
+                    FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_contract, currentContractValue);
+                }
+                else {
+                    FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_contract, null);
+                }
+                FormScriptingHelper.makeFieldRequired(ct_accountFields.ct_contract);
+                FormScriptingHelper.enableField(ct_accountFields.ct_contract);
+            }
+            else {
+                if (currentContractValue != null) {
+                    FormScriptingHelper.addOptionSetOption(ct_accountFields.ct_contract, { text: ct_accountOptions.ct_contractMap[ct_accountOptions.ct_contract.Noneoftheabove], value: ct_accountOptions.ct_contract.Noneoftheabove });
+                    FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_contract, currentContractValue);
+                    FormScriptingHelper.enableField(ct_accountFields.ct_contract);
+                }
+            }
+            lpPositionRules();
+
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "contractRules");
+            }
+        }
+    }
+    //ct_heldawayid field behaviors
+    export function heldAwayRules() {
+        try {
+            var custodianValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_custodian);
+            if (custodianValue == ct_accountOptions.ct_custodian.HeldAway) {
+                FormScriptingHelper.showField(ct_accountFields.ct_heldawayid);
+                FormScriptingHelper.makeFieldRequired(ct_accountFields.ct_heldawayid);
+                FormScriptingHelper.enableField(ct_accountFields.ct_heldawayid);
+            }
+            else {
+                FormScriptingHelper.makeFieldOptional(ct_accountFields.ct_heldawayid);
+                FormScriptingHelper.hideField(ct_accountFields.ct_heldawayid);
+            }
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "heldAwayRules");
+            }
+        }
+    }
+
+    //ct_product field behaviors
+    export function productRules() {
+        try {
+            var custodianValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_custodian);
+            var currentProductValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_product);
+            if (custodianValue == ct_accountOptions.ct_custodian.HeldAway) {
+                FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_product, currentProductValue);
+                FormScriptingHelper.makeFieldRequired(ct_accountFields.ct_product);
+                FormScriptingHelper.showField(ct_accountFields.ct_product);
+                FormScriptingHelper.makeFieldRequired("ct_capfinancialsecuritiesbrokerdealeraccount");
+                FormScriptingHelper.showField("ct_capfinancialsecuritiesbrokerdealeraccount");
+            }
+            else if (custodianValue == ct_accountOptions.ct_custodian.Pershing || custodianValue == ct_accountOptions.ct_custodian.Fidelity ||
+                custodianValue == ct_accountOptions.ct_custodian.Schwab || custodianValue == ct_accountOptions.ct_custodian.APEX) {
+                if (currentProductValue != ct_accountOptions.ct_product.HeldAwayDiscretion) {
+                    FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_product, currentProductValue);
+                }
+                else {
+                    FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_product, null);
+                }
+                FormScriptingHelper.makeFieldOptional(ct_accountFields.ct_product);
+                FormScriptingHelper.hideField(ct_accountFields.ct_product);
+                FormScriptingHelper.makeFieldOptional("ct_capfinancialsecuritiesbrokerdealeraccount");
+                FormScriptingHelper.hideField("ct_capfinancialsecuritiesbrokerdealeraccount");
+            }
+            else {
+                if (currentProductValue != ct_accountOptions.ct_product.HeldAwayDiscretion) {
+                    FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_product, currentProductValue);
+                }
+                else {
+                    FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_product, null);
+                }
+                FormScriptingHelper.makeFieldOptional(ct_accountFields.ct_product);
+                FormScriptingHelper.showField(ct_accountFields.ct_product);
+
+                FormScriptingHelper.makeFieldOptional("ct_capfinancialsecuritiesbrokerdealeraccount");
+                FormScriptingHelper.hideField("ct_capfinancialsecuritiesbrokerdealeraccount");
+            }
+
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "productRules");
+            }
+        }
+    }
+
+    //ct_accounttype field behaviors
+    export function accountRegistRules() {
+        try {
+            var custodianValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_custodian);
+            var productValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_product);
+            FormScriptingHelper.makeFieldRequired(ct_accountFields.ct_accounttype);
+            if (custodianValue == ct_accountOptions.ct_custodian.HeldAway && ((productValue == ct_accountOptions.ct_product.InsuranceProduct) || (productValue == ct_accountOptions.ct_product._529Plan) || (productValue == ct_accountOptions.ct_product.Annuity) || (productValue == ct_accountOptions.ct_product.LtdPartnership))) {
+                FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_accounttype, null);
+            }
+            else if (custodianValue == ct_accountOptions.ct_custodian.NATC) {
+                FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_accounttype, ct_accountOptions.ct_accounttype.PersonalTrust);
+            }
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "accountRegistRules");
+            }
+        }
+    }
+
+    //ct_investmentid field behaviors
+    export function investmentRules() {
+        try {
+            var contractValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_contract);
+            var custodianValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_custodian);
+            var productValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_product);
+            var positionValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_islp);
+
+            if (contractValue == ct_accountOptions.ct_contract.SMA || positionValue == true || (custodianValue == ct_accountOptions.ct_custodian.HeldAway && productValue == ct_accountOptions.ct_product.LtdPartnership)) {
+
+                if ((custodianValue == ct_accountOptions.ct_custodian.Pershing || custodianValue == ct_accountOptions.ct_custodian.Fidelity || custodianValue == ct_accountOptions.ct_custodian.Schwab || custodianValue == ct_accountOptions.ct_custodian.APEX) && contractValue == ct_accountOptions.ct_contract.SMA) {
+
+                    setInvestmentView(SMA_INVESTMENTS);
+                }
+                else if (custodianValue == ct_accountOptions.ct_custodian.HeldAway && productValue == ct_accountOptions.ct_product.InsuranceProduct) {
+                    setInvestmentView(INSURANCEPRODUCT_INVESTMENTS);
+                }
+                else if (custodianValue == ct_accountOptions.ct_custodian.HeldAway && productValue == ct_accountOptions.ct_product._529Plan) {
+                    setInvestmentView(PLAN529_INVESTMENTS);
+                }
+                else if (custodianValue == ct_accountOptions.ct_custodian.HeldAway && productValue == ct_accountOptions.ct_product.Annuity) {
+                    FormScriptingHelper.enableField(ct_accountFields.ct_investmentid);
+                    setInvestmentView(VARIABLEANNUITY_INVESTMENTS);
+                }
+                else if (custodianValue == ct_accountOptions.ct_custodian.HeldAway && productValue == ct_accountOptions.ct_product.LtdPartnership) {
+                    setInvestmentView(LIMITEDPARTNERSHIP_INVESTMENTS);
+                }
+                else {
+                    setInvestmentView(DEFAULT_INVESTMENTS);
+                }
+            }
+            else {
+                FormScriptingHelper.enableField(ct_accountFields.ct_investmentid);
+            }
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "investmentRules");
+            }
+        }
+    }
+
+
+    //ct_islp field behaviors
+    export function lpPositionRules() {
+        try {
+            var contractValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_contract);
+            if (contractValue == ct_accountOptions.ct_contract.SMA) {
+                FormScriptingHelper.setCheckboxValue(ct_accountFields.ct_islp, false);
+                FormScriptingHelper.disableField(ct_accountFields.ct_islp);
+            }
+            else {
+                FormScriptingHelper.enableField(ct_accountFields.ct_islp);
+            }
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "lpPositionRules");
+            }
+        }
+    }
+
+    //insurance section behaviors
+    export function insuranceSectionRules() {
+        try {
+            var custodianValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_custodian);
+            var productValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_product);
+            if (custodianValue == ct_accountOptions.ct_custodian.HeldAway && productValue == ct_accountOptions.ct_product.InsuranceProduct) {
+                FormScriptingHelper.showTab("Insurance");
+                FormScriptingHelper.makeFieldRequired(ct_accountFields.ct_insurancetype);
+            }
+            else {
+                FormScriptingHelper.hideTab("Insurance");
+                FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_insurancetype, null);
+                FormScriptingHelper.makeFieldOptional(ct_accountFields.ct_insurancetype);
+            }
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "insuranceSectionRules");
+            }
+        }
+    }
+    //BELOW CODE BY AK
+    export function onchangecontract_modelRules() {
+        try {
+            var contractValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_contract);
+            var custodianValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_custodian);
+            FormScriptingHelper.makeFieldRequired(ct_accountFields.ct_modelid);
+            if ((custodianValue == ct_accountOptions.ct_custodian.Pershing || custodianValue == ct_accountOptions.ct_custodian.Fidelity || custodianValue == ct_accountOptions.ct_custodian.Schwab || custodianValue == ct_accountOptions.ct_custodian.NATC) && contractValue == ct_accountOptions.ct_contract.PMA) {
+
+                FormScriptingHelper.clearLookupField(ct_accountFields.ct_modelid);
+            }
+            else if ((custodianValue == ct_accountOptions.ct_custodian.Pershing || custodianValue == ct_accountOptions.ct_custodian.Fidelity || custodianValue == ct_accountOptions.ct_custodian.Schwab || custodianValue == ct_accountOptions.ct_custodian.NATC) && contractValue == ct_accountOptions.ct_contract.PMAPlus) {
+
+                FormScriptingHelper.clearLookupField(ct_accountFields.ct_modelid);
+            }
+            else {
+                FormScriptingHelper.setLookupValue(ct_accountFields.ct_modelid, "ct_model", MODELGUID, "No Model");
+            }
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onchangecontract_modelRules");
+            }
+        }
+
+    }
+    //END AK
+
+    //ct_modelid field behaviors
+    export function modelRules() {
+        try {
+            var contractValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_contract);
+            var custodianValue = FormScriptingHelper.getFieldValue(ct_accountFields.ct_custodian);
+            FormScriptingHelper.makeFieldRequired(ct_accountFields.ct_modelid);
+            if (custodianValue == ct_accountOptions.ct_custodian.HeldAway) {
+                FormScriptingHelper.setLookupValue(ct_accountFields.ct_modelid, "ct_model", MODELGUID, "No Model");
+            }
+
+            else if ((custodianValue == ct_accountOptions.ct_custodian.Pershing || custodianValue == ct_accountOptions.ct_custodian.Fidelity || custodianValue == ct_accountOptions.ct_custodian.Schwab || custodianValue == ct_accountOptions.ct_custodian.APEX) && contractValue == ct_accountOptions.ct_contract.PMA) {
+
+            }
+            else if ((custodianValue == ct_accountOptions.ct_custodian.Pershing || custodianValue == ct_accountOptions.ct_custodian.Fidelity || custodianValue == ct_accountOptions.ct_custodian.Schwab || custodianValue == ct_accountOptions.ct_custodian.NATC || custodianValue == ct_accountOptions.ct_custodian.APEX) && contractValue == ct_accountOptions.ct_contract.SMA) {
+
+                FormScriptingHelper.setLookupValue(ct_accountFields.ct_modelid, "ct_model", MODELGUID, "No Model");
+            }
+            else if ((custodianValue == ct_accountOptions.ct_custodian.Pershing || custodianValue == ct_accountOptions.ct_custodian.Fidelity || custodianValue == ct_accountOptions.ct_custodian.Schwab || custodianValue == ct_accountOptions.ct_custodian.NATC || custodianValue == ct_accountOptions.ct_custodian.APEX) && contractValue == ct_accountOptions.ct_contract.Retail) {
+
+                FormScriptingHelper.setLookupValue(ct_accountFields.ct_modelid, "ct_model", MODELGUID, "No Model");
+
+            }
+            else if ((custodianValue == ct_accountOptions.ct_custodian.Pershing || custodianValue == ct_accountOptions.ct_custodian.Fidelity || custodianValue == ct_accountOptions.ct_custodian.Schwab || custodianValue == ct_accountOptions.ct_custodian.NATC || custodianValue == ct_accountOptions.ct_custodian.APEX) && contractValue == ct_accountOptions.ct_contract.PMA) {
+
+            }
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "modelRules");
+            }
+        }
+    }
+
+    export function preserveOptionSets() {
+        try {
+            PRODUCT_OPTIONS = FormScriptingHelper.getAllOptionSetOptions(ct_accountFields.ct_product);
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "preserveOptionSets");
+            }
+        }
+    }
+
+    export function setInvestmentView(viewId) {
+        try {
+            FormScriptingHelper.setDefaultViewForLookupById(ct_accountFields.ct_investmentid, viewId)
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "setInvestmentView");
+            }
+        }
+    }
+
+    //This function was replaced by a plugin named "Captrust.Plugin.SetAssetandFirm.SetAssetandFirm"
+    export function getDefaultAssetClassAndManager() {
+        try {
+            FormScriptingHelper.enableField(ct_accountFields.ct_assetclassid);
+            FormScriptingHelper.enableField(ct_accountFields.ct_investmentfirmid);
+            var investmentId = FormScriptingHelper.getLookupValue(ct_accountFields.ct_investmentid);
+            if (investmentId != null) {
+                var results = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "ct_investments(" + investmentId.id + ")?$select=&$expand=Ct_assetclassid,Ct_investmentfirmid");
+                if (results != null) {
+
+                    if (results.Ct_assetclassid.ct_assetclassid != null) {
+                        FormScriptingHelper.setLookupValue(ct_accountFields.ct_assetclassid, "ct_assetclass", results.Ct_assetclassid.ct_assetclassid, results.Ct_assetclassid.ct_name);
+                        FormScriptingHelper.disableField(ct_accountFields.ct_assetclassid);
+                    } else {
+                        FormScriptingHelper.setLookupValue(ct_accountFields.ct_assetclassid, "ct_assetclass", null, null);
+                    }
+
+                    if (results.Ct_investmentfirmid.ct_investmentfirmid != null) {
+                        FormScriptingHelper.setLookupValue(ct_accountFields.ct_investmentfirmid, "ct_investmentfirm", results.Ct_investmentfirmid.ct_investmentfirmid, results.Ct_investmentfirmid.ct_name);
+                        FormScriptingHelper.disableField(ct_accountFields.ct_investmentfirmid);
+                    } else {
+                        FormScriptingHelper.setLookupValue(ct_accountFields.ct_investmentfirmid, "ct_investmentfirm", null, null);
+                    }
+                }
+                else {
+                    FormScriptingHelper.setLookupValue(ct_accountFields.ct_assetclassid, "ct_assetclass", null, null);
+                    FormScriptingHelper.setLookupValue(ct_accountFields.ct_investmentfirmid, "ct_investmentfirm", null, null);
+                }
+            }
+        } catch (err) {
+
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "getDefaultAssetClassAndManager");
+            }
+        }
+    }
+
+    export function validateRField(executionobj)
+    {
+        
+        let baTeam = FormScriptingHelper.CheckUserinTeamwithteamid("66c61e7c-4cff-e611-8104-fc15b4286c00");  // SECURITY TEAM Business Analyst (BA)
+        let financeTeam = FormScriptingHelper.CheckUserinTeamwithteamid("f0a77772-4eff-e611-8104-fc15b4286c00");  // SECURITY TEAM Finance
+        let wealthOpsTeam = FormScriptingHelper.CheckUserinTeamwithteamid("f33e7620-4dff-e611-8104-fc15b4286c00");  // SECURITY TEAM Wealth Operations
+
+        if (baTeam || financeTeam || wealthOpsTeam)
+        {
+            if (FormScriptingHelper.isDirty(ct_accountFields.ct_rb) || FormScriptingHelper.isDirty(ct_accountFields.ct_raccountid)) {
+                var rb = FormScriptingHelper.getOptionSetValue(ct_accountFields.ct_rb);
+                var racct = FormScriptingHelper.getFieldValue(ct_accountFields.ct_raccountid);
+                if (rb != null) {
+                    if (rb == ct_accountOptions.ct_rb.B_Wealth_MailedtoClient) {
+                        if (racct != null) {
+                            FormScriptingHelper.openConfirmDialog(
+                                {
+                                    text: "Review RB and R account fields. The RB field states that an invoice for a client payment is selected, but a redemption account is populated in the R Account Field. Does the R Account Field value need to remain?\n Yes - The R Account Value should remain populated. \n No- The R Account field should be cleared of all values.",
+                                    subtitle: " ",
+                                    confirmButtonLabel: "Yes",
+                                    cancelButtonLabel: "No"
+
+                                },
+                                null,
+                                function yesclosecallback(success) {
+                                    if (success.confirmed) {
+                                        //Save as normal
+                                    }
+                                    else {
+                                        //clear the field and then save as normal
+                                        FormScriptingHelper.clearLookupField(ct_accountFields.ct_raccountid);
+                                    }
+                                },
+                                null
+                            );
+                        }
+                    }
+                }
+            }
+        }        
+        /*  refreshForm();*/
+    }
+
+    export function wealthAggregationFormAlert(executionobj) {
+
+        if (FormScriptingHelper.isDirty(ct_accountFields.ct_aggregationtype)) {
+            var aggtype = FormScriptingHelper.getFieldValue(ct_accountFields.ct_aggregationtype);
+            if (aggtype == ct_accountOptions.ct_aggregationtype.Multiplefeeschedules_multipleclients || aggtype == ct_accountOptions.ct_aggregationtype.Onefeeschedule_multipleclients) {
+                FormScriptingHelper.openConfirmDialog(
+                    {
+                        text: "Form must be saved to legal docs to proceed.\nYes – Generate the form for me to review and save to legal documents.\nNo – Do not generate the form.",
+                        subtitle: "Wealth Aggregation Form Required ",
+                        confirmButtonLabel: "Yes",
+                        cancelButtonLabel: "No"
+
+                    },
+                    null,
+                    function yesclosecallback(success) {
+                        if (success.confirmed) {
+                            //Generate the Form and continue
+                            generateWealthAggregationForm();
+                        }
+                        else {
+                            //Do Nothing, Save as normal
+                        }
+                    },
+                    null
+                );
+            }
+        }
+        /*refreshForm();*/
+    }
+
+    export function generateWealthAggregationForm() {
+        try {
+            var url = QueryHelper.getSystemParameter("InvoicingAPIURL").ct_value + "/api/WealthAggregation/GetPDF";
+            var advisor = FormScriptingHelper.getFieldValue(ct_accountFields.ownerid)[0].name;
+            var cmc = FormScriptingHelper.getFieldValue(ct_accountFields.ct_primaryownerid)[0].name;
+            var client = FormScriptingHelper.getFieldValue(ct_accountFields.ct_householdid);
+            var acctid = FormScriptingHelper.getEntityId();
+            var clientname = client[0].name;
+            var clientid = client[0].id.replace("{", '');;
+            var data = new wealthAggParams(advisor, cmc, clientname, clientid.replace("}", ''), acctid);
+            var Token = "InvoicingToken";
+            var auth = QueryHelper.getSystemParameter(Token).ct_value;
+            var name = clientname + "_WealthAggregationForm";
+            while (name.indexOf(".") >= 0) {
+                name = name.replace(".", "");
+            }
+
+            QueryHelper.ApiGatewayPost(url, data, auth, OpenPdf, true, onerror, "application/pdf", name);
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "OnButtonClick");
+            }
+        }
+    }
+
+    export function OpenPdf(response, name) {
+
+        var blob = new window.Blob([response], { type: 'application/pdf' });
+        const data = window.URL.createObjectURL(blob);
+        var link = document.createElement('a');
+        link.href = data;
+        link.download = name;
+        link.click();
+    }
+    export function defaultErrorFunction(response: any): any {
+        try {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(JSON.stringify(response), "defaultErrorFunction");
+            }
+        } catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "defaultErrorFunction");
+            }
+        }
+        return null;
+    }
+
+    export function wealthAggParams(advisor, cmc, name, id, acctid) {
+        this.advisor = advisor;
+        this.CMC = cmc;
+        this.date = Date.now;
+        this.clientname = name;
+        this.clientid = id;
+        this.accountid = acctid;
+    }
+
+
+    export function prefillAggregateType() {
+        try {
+            if (FormScriptingHelper.getFieldValue(ct_accountFields.ct_aggregatebilling) == ct_accountOptions.ct_aggregatebilling.Yes) {
+                var clientid = FormScriptingHelper.getLookupValue(ct_accountFields.ct_householdid);
+                var url = QueryHelper.getSystemParameter("InvoicingAPIURL").ct_value + "/api/AggregateType";
+                var Token = "InvoicingToken";
+                var auth = QueryHelper.getSystemParameter(Token).ct_value;
+                var aggtype = QueryHelper.ApiGatewayPost(url, clientid, auth);
+                if (aggtype != 0) {
+                    FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_aggregationtype, aggtype);
+                } else {
+                    FormScriptingHelper.setFormNotification("WARNING", "Unable to validate Aggregation Type please manually validate.", "Unable To Validate");
+                }
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "OnButtonClick");
+            }
+        }
+
+    }
+
+    export function onPopulateClosureNotification() {
+        try {
+            if (FormScriptingHelper.getDateValue(ct_accountFields.ct_closurenotificationdate) != null) {
+                FormScriptingHelper.makeFieldRequired(ct_accountFields.ct_finalinvoicerebate);
+            } else {
+                FormScriptingHelper.makeFieldOptional(ct_accountFields.ct_finalinvoicerebate);
+                FormScriptingHelper.resetOptionSetList(ct_accountFields.ct_finalinvoicerebate);
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onPopulateClosureNotification");
+            }
+        }
+    }
+
+    
+    export function ondeliverymethod()
+    {
+       
+        try
+        {
+            FormScriptingHelper.removeOptionSetOptionByValue("ct_deliverymethod", 206450000);  // "AEX E-Sign"
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "ondeliverymethod");
+            }
+        }
+    }
+
+    export function onFinalInvoiceRebate() {
+        try {
+            if (FormScriptingHelper.getOptionSetValue(ct_accountFields.ct_finalinvoicerebate) == ct_accountOptions.ct_finalinvoicerebate.Yes) {
+                FormScriptingHelper.showField(ct_accountFields.ct_feeorrebateasofdate);
+                FormScriptingHelper.makeFieldRequired(ct_accountFields.ct_feeorrebateasofdate);
+            } else {
+                FormScriptingHelper.makeFieldOptional(ct_accountFields.ct_feeorrebateasofdate);
+                FormScriptingHelper.setDateField(ct_accountFields.ct_feeorrebateasofdate, null);
+                FormScriptingHelper.hideField(ct_accountFields.ct_feeorrebateasofdate);
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onFinalInvoiceRebate");
+            }
+        }
+    }
+
+    export function onsaveFinalInvoiceRebate(executionObj) {
+        try {
+            if (FormScriptingHelper.getOptionSetValue(ct_accountFields.ct_finalinvoicerebate) == ct_accountOptions.ct_finalinvoicerebate.No) {
+
+                FormScriptingHelper.openConfirmDialog(
+                    {
+                        text: "You've indicated the account being closed DOES NOT require final invoicing.\n Are you sure Y/N?  By selecting \"YES\", the account will no longer be invoiced.",
+                        subtitle: "Confirm Final Invoice Status",
+                        confirmButtonLabel: "Yes",
+                        cancelButtonLabel: "No"
+
+                    },
+                    null,
+                    function yesclosecallback(success) {
+                        if (success.confirmed) {
+
+                            FormScriptingHelper.clearLookupField(ct_accountFields.ct_pashousehold);
+                            let feeschedules = QueryHelper.webApiRequest(QueryHelper.getWebApiUrl() + "ct_account_ct_feescheduleset?$select=ct_feescheduleid&$filter=ct_accountid eq " + FormScriptingHelper.getEntityId());
+                            for (var i = 0; i < feeschedules.value.length; i++) {
+                                QueryHelper.webApiDisassociate(QueryHelper.getWebApiUrl() + "ct_accounts(" + FormScriptingHelper.getEntityId() + ")/ct_account_ct_feeschedule(" + feeschedules.value[i]["ct_feescheduleid"] + ")/$ref");
+                            }
+                        }
+                        else {
+                            FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_finalinvoicerebate, null);
+                        }
+                    },
+                    null
+                );
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onsaveFinalInvoiceRebate");
+            }
+        }
+
+    }
+
+    export function showCustodianAlerts(executionObj) {
+        try {
+
+            let entityId = FormScriptingHelper.getEntityId();
+            if (entityId) {
+                let alertsUrl = QueryHelper.getWebApiUrl() + "ct_custodianalerts?$filter=_ct_account_value eq " + entityId + " and statecode eq 0";
+                let Alerts = QueryHelper.webApiRequest(alertsUrl);
+
+                if (Alerts?.value) {
+                    for (let i = 0; i < Alerts.value.length; i++) {
+                        if (Alerts.value[i].prioritycode === 2) {
+                            let subject = Alerts.value[i].subject;
+                            if (subject) {
+                                FormScriptingHelper.setFormNotification("ERROR", "Custodian Alert: " + subject, "" + i);
+                            }
+                        }
+                    }
+                } else {
+                    // Handle case where Alerts or Alerts.value is null
+                    console.warn("No alerts found or Alerts.value is null");
+                }
+            } else {
+                // Handle case where entityId is null
+                console.warn("Entity ID is null --New Account so OK");
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "showCustodianAlerts");
+            }
+        }
+    }
+    export function toggleRMDOptionset() {
+        try {
+            if ((FormScriptingHelper.getOptionSetValue(ct_accountFields.ct_rmdoverrideeligibility) == ct_accountOptions.ct_rmdoverrideeligibility.Yes) || (FormScriptingHelper.getFieldValue(ct_accountFields.ct_rmdeligiblity) == true)) {
+                FormScriptingHelper.enableField("ct_rmddistributionmethod");
+            } else {
+                FormScriptingHelper.disableField("ct_rmddistributionmethod");
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "toggleRMDOptionset");
+            }
+        }
+    }
+
+    export function onAccountRegistrationChange() {
+
+        try {
+            if (FormScriptingHelper.getOptionSetValue(ct_accountFields.ct_accounttype) == ct_accountOptions.ct_accounttype.InheritedIRA || FormScriptingHelper.getOptionSetValue(ct_accountFields.ct_accounttype) == ct_accountOptions.ct_accounttype.InheritedRothIRA) {
+                FormScriptingHelper.setOptionSetValue(ct_accountFields.ct_rmdoverrideeligibility, ct_accountOptions.ct_rmdoverrideeligibility.Yes, true);
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "onAccountRegistrationChange");
+            }
+        }
+
+    }
+
+    export function showSchwabAcctRestrictions() {
+
+        var custodian = FormScriptingHelper.getOptionSetValue(ct_accountFields.ct_custodian);
+
+        if (custodian == ct_accountOptions.ct_custodian.Schwab) {
+            FormScriptingHelper.showSection("AccountInfo", "SchwabAccountRestrictions");
+            var restrictions = FormScriptingHelper.getFieldValue("ct_schwabaccountrestrictions");
+            if (restrictions != null && restrictions.length > 0) {
+                FormScriptingHelper.setFormNotification("ERROR", "Schwab - Account Has Restriction(s)", "restrictionsnotification");
+            }
+        } else {
+            FormScriptingHelper.hideSection("AccountInfo", "SchwabAccountRestrictions");
+        }
+    }
+
+    export function showTradingRequestsTab() {
+        try {
+            const TradingRequestTab = "ct_tradeactionrequests_tab";
+            let hasRole = false; 
+            Xrm.Utility.getGlobalContext().userSettings.roles.forEach(
+                role => { if(role.name == "Trading Canvas App Access") { hasRole = true;} }
+            );
+            if (hasRole)
+            {
+                SetIFrameSorce();
+                FormScriptingHelper.showTab(TradingRequestTab);
+            }
+            else
+            {
+                FormScriptingHelper.hideTab(TradingRequestTab);
+            }
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "showTradingRequestsTab()");
+            }
+        }
+    }
+
+    export function SetIFrameSorce()
+    {
+        try {
+            const url = QueryHelper.getSystemParameter("TradingAppURL").ct_value;
+
+            FormScriptingHelper.getFormContext()
+                .getControl<Xrm.Controls.IframeControl>("IFRAME_ct_tradeoperationsrequest")
+                .setSrc(url);
+        }
+        catch (err) {
+            if (typeof LogHelper.logUiException === "function") {
+                LogHelper.logUiException(err, "SetIFrameSorce()");
+            }
+        }
+    }
+}
